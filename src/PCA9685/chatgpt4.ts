@@ -1,15 +1,15 @@
 import { openPromisified, PromisifiedBus } from 'i2c-bus';
 
 const MODE1 = 0x00;
-const PRESCALE = 0xFE;
+const PRESCALE = 0xfe;
 const LED0_ON_L = 0x06;
 const LED0_ON_H = 0x07;
 const LED0_OFF_L = 0x08;
 const LED0_OFF_H = 0x09;
-const ALL_LED_ON_L = 0xFA;
-const ALL_LED_ON_H = 0xFB;
-const ALL_LED_OFF_L = 0xFC;
-const ALL_LED_OFF_H = 0xFD;
+const ALL_LED_ON_L = 0xfa;
+const ALL_LED_ON_H = 0xfb;
+const ALL_LED_OFF_L = 0xfc;
+const ALL_LED_OFF_H = 0xfd;
 const RESTART = 0x80;
 const SLEEP = 0x10;
 const ALLCALL = 0x01;
@@ -41,14 +41,14 @@ class PCA9685 {
     }
 
     async setPWMFreq(freq: number): Promise<void> {
-        let prescaleVal = 25000000.0;    // 25MHz
-        prescaleVal /= 4096.0;           // 12-bit
+        let prescaleVal = 25000000.0; // 25MHz
+        prescaleVal /= 4096.0; // 12-bit
         prescaleVal /= freq;
         prescaleVal -= 1.0;
         const prescale = Math.floor(prescaleVal + 0.5);
 
         const oldmode = await this.readByte(MODE1);
-        const newmode = (oldmode & 0x7F) | 0x10; // sleep
+        const newmode = (oldmode & 0x7f) | 0x10; // sleep
         await this.writeByte(MODE1, newmode); // go to sleep
         await this.writeByte(PRESCALE, prescale);
         await this.writeByte(MODE1, oldmode);
@@ -56,22 +56,26 @@ class PCA9685 {
         await this.writeByte(MODE1, oldmode | 0x80);
     }
 
+    async setDutyCycle(channel: number, dutyCycle: number): Promise<void> {
+        await this.setPWM(channel, 0, Math.floor(dutyCycle * 4095));
+    }
+
     async setPWM(channel: number, on: number, off: number): Promise<void> {
-        await this.writeByte(LED0_ON_L + 4 * channel, on & 0xFF);
+        await this.writeByte(LED0_ON_L + 4 * channel, on & 0xff);
         await this.writeByte(LED0_ON_H + 4 * channel, on >> 8);
-        await this.writeByte(LED0_OFF_L + 4 * channel, off & 0xFF);
+        await this.writeByte(LED0_OFF_L + 4 * channel, off & 0xff);
         await this.writeByte(LED0_OFF_H + 4 * channel, off >> 8);
     }
 
     async setAllPWM(on: number, off: number): Promise<void> {
-        await this.writeByte(ALL_LED_ON_L, on & 0xFF);
+        await this.writeByte(ALL_LED_ON_L, on & 0xff);
         await this.writeByte(ALL_LED_ON_H, on >> 8);
-        await this.writeByte(ALL_LED_OFF_L, off & 0xFF);
+        await this.writeByte(ALL_LED_OFF_L, off & 0xff);
         await this.writeByte(ALL_LED_OFF_H, off >> 8);
     }
 
     private async sleep(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     // Additional methods for advanced control can be added here.
