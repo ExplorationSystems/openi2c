@@ -56,10 +56,6 @@ class PCA9685 {
         await this.writeByte(MODE1, oldmode | 0x80);
     }
 
-    async setDutyCycle(channel: number, dutyCycle: number): Promise<void> {
-        await this.setPWM(channel, 0, Math.floor(dutyCycle * 4095));
-    }
-
     async setPWM(channel: number, on: number, off: number): Promise<void> {
         await this.writeByte(LED0_ON_L + 4 * channel, on & 0xff);
         await this.writeByte(LED0_ON_H + 4 * channel, on >> 8);
@@ -84,7 +80,7 @@ class PCA9685 {
 async function main() {
     const pwmDriver = new PCA9685();
     await pwmDriver.init();
-    await pwmDriver.setPWM(0, 0, 4096); // Example usage
+    await pwmDriver.setPWM(0, 0, 2000); // Example usage
     // Other operations
 }
 
