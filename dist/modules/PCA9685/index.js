@@ -34,10 +34,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PCA9685 = exports.PRESCALE = exports.MODE1 = exports.PCA9685_ADDRESS = void 0;
 const i2c = __importStar(require("i2c-bus"));
+const utils_1 = require("../../utils");
 exports.PCA9685_ADDRESS = 0x40;
 exports.MODE1 = 0x00;
 exports.PRESCALE = 0xfe;
-// export const LED0_ON_L = 0x06;
 const LED0_ON_L = 0x06;
 const LED0_ON_H = 0x07;
 const LED0_OFF_L = 0x08;
@@ -70,9 +70,10 @@ class PCA9685 {
             const prescale = Math.round(25000000 / (4096 * freq)) - 1;
             yield this.writeByte(exports.MODE1, 0x10); // sleep
             yield this.writeByte(exports.PRESCALE, prescale); // set frequency prescaler
-            // await sleep(50);
+            // Does it need to sleep?
+            yield (0, utils_1.sleep)(1);
             yield this.writeByte(exports.MODE1, 0x80); // wake up
-            // await sleep(50);
+            yield (0, utils_1.sleep)(1);
         });
     }
     setPWM(channel, on, off) {
@@ -88,6 +89,3 @@ class PCA9685 {
     }
 }
 exports.PCA9685 = PCA9685;
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}

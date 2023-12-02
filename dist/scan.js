@@ -32,16 +32,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.scan = void 0;
 const i2c = __importStar(require("i2c-bus"));
-const busNumber = +process.argv[2] || 0;
-console.log(`Scanning I2C bus ${busNumber}...`);
-i2c.openPromisified(busNumber).then((bus) => __awaiter(void 0, void 0, void 0, function* () {
-    bus.scan().then((addresses) => {
+function scan(busNumber) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // const busNumber = +process.argv[2] || 0;
+        console.log(`Scanning I2C bus ${busNumber}...`);
+        const bus = yield i2c.openPromisified(busNumber);
+        const addresses = yield bus.scan();
         console.log(addresses);
     });
-}));
-// import { PCA9685 } from './index';
-// async function main() {
-//     const pwmDriver = new PCA9685();
-//     await pwmDriver.setPWM(0, 0, 4096); // Example usage
-// }
+}
+exports.scan = scan;
