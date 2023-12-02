@@ -1,9 +1,9 @@
 import * as i2c from 'i2c-bus';
+import { sleep } from '../../utils';
 
 export const PCA9685_ADDRESS = 0x40;
 export const MODE1 = 0x00;
 export const PRESCALE = 0xfe;
-// export const LED0_ON_L = 0x06;
 const LED0_ON_L = 0x06;
 const LED0_ON_H = 0x07;
 const LED0_OFF_L = 0x08;
@@ -39,9 +39,10 @@ export class PCA9685 {
 
         await this.writeByte(MODE1, 0x10); // sleep
         await this.writeByte(PRESCALE, prescale); // set frequency prescaler
-        // await sleep(50);
+        // Does it need to sleep?
+        await sleep(1);
         await this.writeByte(MODE1, 0x80); // wake up
-        // await sleep(50);
+        await sleep(1);
     }
 
     async setPWM(channel: number, on: number, off: number) {
@@ -53,8 +54,4 @@ export class PCA9685 {
             this.bus.writeByte(this.address, LED0_OFF_H + 4 * channel, off >> 8),
         ])
     }
-}
-
-function sleep(ms:number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
