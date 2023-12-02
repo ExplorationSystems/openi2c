@@ -3,7 +3,11 @@ import * as i2c from 'i2c-bus';
 export const PCA9685_ADDRESS = 0x40;
 export const MODE1 = 0x00;
 export const PRESCALE = 0xfe;
-export const LED0_ON_L = 0x06;
+// export const LED0_ON_L = 0x06;
+const LED0_ON_L = 0x06;
+const LED0_ON_H = 0x07;
+const LED0_OFF_L = 0x08;
+const LED0_OFF_H = 0x09;
 
 export class PCA9685 {
     private bus: i2c.PromisifiedBus;
@@ -15,7 +19,6 @@ export class PCA9685 {
     }
 
     async writeByte(register: number, value: number) {
-        // await this.bus.i2cWrite(this.address, 1, Buffer.from([register, value]));
         await this.bus.writeByte(this.address, register, value);
     }
 
@@ -24,41 +27,31 @@ export class PCA9685 {
     }
     
     async setDutyCycle(channel: number, dutyCycle: number): Promise<void> {
-        await this.setPWM(channel, 0, Math.floor(dutyCycle * 4095));
+        dutyCycle = Math.min(1, Math.max(0, dutyCycle)); // Clamp to [0,1]
+        console.log(`Set duty cycle for channel ${channel} to ${dutyCycle}`)
+        await this.setPWM(channel, 0, Math.round(dutyCycle * 4095));
     } 
 
-    async setPWMFreq(freq: number) {
-        console.log('setPWMFreq', freq)
-        // let prescaleval = 25000000;
-        // prescaleval /= 4096;
-        // prescaleval /= freq;
-        // prescaleval -= 1;
-        // const prescale = Math.floor(prescaleval + 0.5);
+    async setFrequency(freq: number) {
+        console.log(`Set PWM frequency to ${freq} Hz`)
 
         const prescale = Math.round(25000000 / (4096 * freq)) - 1;
 
         await this.writeByte(MODE1, 0x10); // sleep
         await this.writeByte(PRESCALE, prescale); // set frequency prescaler
-        await sleep(50);
+        // await sleep(50);
         await this.writeByte(MODE1, 0x80); // wake up
-        await sleep(50);
-        // console.log('setPWMFreq', await this.readByte(MODE1))
-        // await this.writeByte(MODE1, 0x00); // wait for oscillator
+        // await sleep(50);
     }
 
     async setPWM(channel: number, on: number, off: number) {
-        console.log('setPWM', channel, on, off)
-        // on -= 1;
-        // off -= 1;
-
-        const buffer = Buffer.from([LED0_ON_L + 4 * channel, on & 0xff, on >> 8, off & 0xff, off >> 8]);
-        console.log(buffer)
-
-        await this.bus.i2cWrite(
-            this.address,
-            5,
-            buffer
-        );
+        console.log(`Set PWM for channel ${channel} to ${on} to ${off}`)
+        await Promise.all([
+            this.bus.writeByte(this.address, LED0_ON_L + 4 * channel, on & 0xff),
+            this.bus.writeByte(this.address, LED0_ON_H + 4 * channel, on >> 8),
+            this.bus.writeByte(this.address, LED0_OFF_L + 4 * channel, off & 0xff),
+            this.bus.writeByte(this.address, LED0_OFF_H + 4 * channel, off >> 8),
+        ])
     }
 }
 

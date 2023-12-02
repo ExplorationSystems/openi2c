@@ -2,7 +2,7 @@
   "name": "openi2c",
   "version": "1.0.0",
   "description": "This library is a set of cross platform drivers for common I2C devices.",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "scan": "ts-node ./src/scan.ts",
     "build:ts": "rm -rf dist; tsc",
