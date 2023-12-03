@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "@types/i2c-bus": "^5.1.2",
     "@types/node": "^20.8.10",
     "@typescript-eslint/eslint-plugin": "^6.9.0",
@@ -35,6 +36,7 @@
   },
   "homepage": "https://github.com/ExplorationSystems/openi2c#readme",
   "dependencies": {
+    "debug": "^4.3.4",
     "i2c-bus": "^5.2.3"
   }
 }
