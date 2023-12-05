@@ -5,8 +5,8 @@ async function main() {
     await mpu9250.init();
 
     while (true) {
-        const { x, y, z } = await mpu9250.readAccelerometer();
-        console.log(`x: ${x}, y: ${y}, z: ${z}`);
+        const { pitch, roll } = await mpu9250.getPitchAndRoll();
+        process.stdout.write(`\rPitch: ${pitch.toFixed(2)}\tRoll: ${roll.toFixed(2)}`);
     }
 }
 main();

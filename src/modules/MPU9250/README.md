@@ -1,9 +1,15 @@
 # MPU9250
+
 Product Specification: https://invensense.tdk.com/wp-content/uploads/2015/02/PS-MPU-9250A-01-v1.1.pdf
 Register Map: https://cdn.sparkfun.com/assets/learn_tutorials/5/5/0/MPU-9250-Register-Map.pdf
+AK8963C documentation: https://www.akm.com/akm/en/file/datasheet/AK8963C.pdf
 
+Adapted from:
+https://github.com/miniben-90/mpu9250
+https://github.com/jstapels/mpu6050
 
 ## Usage
+
 ```ts
 import { PCA9685 } from 'openi2c/PCA9685';
 
