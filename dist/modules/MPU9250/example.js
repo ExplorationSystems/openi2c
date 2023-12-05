@@ -9,18 +9,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const index_1 = require("./index");
+const _1 = require(".");
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
-        const pwmDriver = new index_1.PCA9685();
-        yield pwmDriver.setFrequency(50);
-        let dutyCycle = 0;
-        setInterval(() => __awaiter(this, void 0, void 0, function* () {
-            yield pwmDriver.setDutyCycle(0, dutyCycle);
-            dutyCycle += 0.1;
-            if (dutyCycle > 1)
-                dutyCycle = 0;
-        }), 500);
+        const mpu9250 = new _1.MPU9250();
+        yield mpu9250.init();
+        while (true) {
+            const { x, y, z } = yield mpu9250.readAccelerometer();
+            console.log(`x: ${x}, y: ${y}, z: ${z}`);
+        }
     });
 }
 main();
