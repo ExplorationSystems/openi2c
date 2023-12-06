@@ -5,7 +5,7 @@ import { Module } from '../Module';
 
 const log = debug.extend('MPU9250');
 
-export class MPU9250 extends Module {
+export class MPU9250 {
     static MPU9250 = {
         ID_MPU_9250: 0x71,
         ID_MPU_9255: 0x73,
@@ -168,5 +168,5 @@ export class MPU9250 extends Module {
         }
     };
 
-    async init() {}
+    async init() { }
 }
