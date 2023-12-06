@@ -3,7 +3,7 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 
-const config = {
+export const config = {
     // Module Registers
     ADDRESS: 0x40,
     MODE1: 0x00,
