@@ -8,6 +8,9 @@ Adapted from:
 https://github.com/miniben-90/mpu9250
 https://github.com/jstapels/mpu6050
 
+This might have hte MPU-9255 inside:
+https://stanford.edu/class/ee267/misc/MPU-9255-Datasheet.pdf
+
 ## Usage
 
 ```ts

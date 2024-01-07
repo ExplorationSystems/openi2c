@@ -463,14 +463,6 @@ function scaleAccel(val, offset, scalerArr) {
  */
 mpu9250.prototype.getMotion9 = function () {
   if (this.i2c) {
-    var mpudata = this.getMotion6();
-    var magdata;
-    if (this.ak8963) {
-      magdata = this.ak8963.getMagAttitude();
-    } else {
-      magdata = [0, 0, 0];
-    }
-    return mpudata.concat(magdata);
   }
   return false;
 };

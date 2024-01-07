@@ -10,6 +10,12 @@ export abstract class BaseDevice {
        return await this.bus.readByte(this.address, adrs);
     }
 
+    async readBytes(adrs: number, length: number){
+        const buf = Buffer.alloc(length);
+        await this.bus.readI2cBlock(this.address, adrs, length, buf);
+        return buf;
+    }
+
     async writeByte(adrs: number, value: number){
         await this.bus.writeByte(this.address, adrs, value);
      }
@@ -40,7 +46,7 @@ export abstract class BaseDevice {
      * @param  {number}   value    The values to change.
      */
     async writeBits(adrs: number, bit: number, length: number, value: number) {
-        const oldValue = await this.bus.readByte(this.address, adrs);
+        const oldValue = await this.readByte(adrs);
         const mask = this.bitMask(bit, length);
         const newValue = oldValue ^ ((oldValue ^ (value << bit)) & mask);
 

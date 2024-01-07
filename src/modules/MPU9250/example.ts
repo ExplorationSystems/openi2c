@@ -1,12 +1,22 @@
-// import { MPU9250 } from '.';
+import { mpu9250, MPU9250 } from './MPU9250';
 
-// async function main() {
-//     const mpu9250 = new MPU9250();
-//     await mpu9250.init();
+async function main() {
+    const mpu = new mpu9250({
+        DEBUG:true,
+        // scaleValues: true,
+        UpMagneto: true,
+        DLPF_CFG: MPU9250.DLPF_CFG_3600HZ,
+        // Set Accel DLPF Value
+        A_DLPF_CFG: MPU9250.A_DLPF_CFG_460HZ,
+        SAMPLE_RATE: 8000,
+    });
+    await mpu.initialize();
 
-//     while (true) {
-//         const { pitch, roll } = await mpu9250.getPitchAndRoll();
-//         process.stdout.write(`\rPitch: ${pitch.toFixed(2)}\tRoll: ${roll.toFixed(2)}`);
-//     }
-// }
-// main();
+    setInterval(async () => {
+        const motion = await mpu.getMotion9();
+        const roll = mpu.getRoll(motion);
+        const pitch = mpu.getPitch(motion);
+        console.log(roll, pitch);
+    }, 1000);
+}
+main();

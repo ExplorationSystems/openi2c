@@ -1,7 +1,7 @@
 import * as i2c from 'i2c-bus';
 import { sleep } from '../../utils';
-import { AK8963, ak8963 } from './AK8963';
-import { BaseDevice } from './BaseDevice';
+import { AK8963, ak8963 } from '../AK8963';
+import { BaseDevice } from '../BaseDevice';
 
 // Interface for MPU9250 configuration
 interface MPU9250Config {
@@ -168,10 +168,7 @@ export const MPU9250 = {
     A_DLPF_CFG_MASK: 0x07
 };
 
-
-
-// mpu9250 class
-class mpu9250 extends BaseDevice {
+export class mpu9250 extends BaseDevice {
     private _config: MPU9250Config;
     // private i2c: any; // Specify the correct type for i2c
     private gyroScalarInv!: number;
@@ -207,7 +204,7 @@ class mpu9250 extends BaseDevice {
         // Clear configuration
         await this.writeBit(MPU9250.RA_PWR_MGMT_1, MPU9250.PWR1_DEVICE_RESET_BIT, 1);
         this.debug.log('INFO', 'Reset configuration MPU9250.');
-        await sleep(10);
+        await sleep(100);
 
         // defined sample rate
         if (
@@ -236,29 +233,29 @@ class mpu9250 extends BaseDevice {
 
         // define clock source
         this.setClockSource(MPU9250.CLOCK_PLL_XGYRO);
-        await sleep(10);
+        await sleep(100);
 
         // define gyro range
         var gyro_fs = [MPU9250.GYRO_FS_250, MPU9250.GYRO_FS_500, MPU9250.GYRO_FS_1000, MPU9250.GYRO_FS_2000];
         var gyro_value = MPU9250.GYRO_FS_250;
         if (this._config.GYRO_FS > -1 && this._config.GYRO_FS < 4) gyro_value = gyro_fs[this._config.GYRO_FS];
         await this.setFullScaleGyroRange(gyro_value);
-        await sleep(10);
+        await sleep(100);
 
         // define accel range
         var accel_fs = [MPU9250.ACCEL_FS_2, MPU9250.ACCEL_FS_4, MPU9250.ACCEL_FS_8, MPU9250.ACCEL_FS_16];
         var accel_value = MPU9250.ACCEL_FS_4;
         if (this._config.ACCEL_FS > -1 && this._config.ACCEL_FS < 4) accel_value = accel_fs[this._config.ACCEL_FS];
         await this.setFullScaleAccelRange(accel_value);
-        await sleep(10);
+        await sleep(100);
 
         // disable sleepEnabled
         await this.setSleepEnabled(false);
-        await sleep(10);
+        await sleep(100);
 
         if (this._config.UpMagneto) {
             this.debug.log('INFO', 'Enabled magnetometer. Starting initialization ....');
-            this.enableMagnetometer();
+            await this.enableMagnetometer();
             this.debug.log('INFO', 'END of magnetometer initialization.');
         }
 
@@ -267,14 +264,104 @@ class mpu9250 extends BaseDevice {
         // Print out the configuration
         if (this._config.DEBUG) {
             await this.printSettings();
-            this.printAccelSettings();
-            this.printGyroSettings();
+            await this.printAccelSettings();
+            await this.printGyroSettings();
             if (this.ak8963) {
-                this.ak8963.printSettings();
+                await this.ak8963.printSettings();
             }
         }
 
-        return this.testDevice();
+        return await this.testDevice();
+    }
+
+    async getMotion9() {
+        const mpudata = await this.getMotion6();
+        let magdata;
+
+        if (this.ak8963) {
+            magdata = await this.ak8963.getMagAttitude();
+        } else {
+            magdata = [0, 0, 0];
+        }
+
+        return mpudata.concat(magdata);
+    }
+
+    async getMotion6() {
+        var buffer = await this.readBytes(MPU9250.ACCEL_XOUT_H, 14);
+        var gCal = this._config.gyroBiasOffset;
+        var aCal = this._config.accelCalibration;
+
+        var xAccel = buffer.readInt16BE(0) * this.accelScalarInv;
+        var yAccel = buffer.readInt16BE(2) * this.accelScalarInv;
+        var zAccel = buffer.readInt16BE(4) * this.accelScalarInv;
+
+        return [
+            // Accelerometer
+            this.scaleAccel(xAccel, aCal.offset.x, aCal.scale.x),
+            this.scaleAccel(yAccel, aCal.offset.y, aCal.scale.y),
+            this.scaleAccel(zAccel, aCal.offset.z, aCal.scale.z),
+            // Skip Temperature - bytes 6:7
+            // Gyroscope
+            buffer.readInt16BE(8) * this.gyroScalarInv + gCal.x,
+            buffer.readInt16BE(10) * this.gyroScalarInv + gCal.y,
+            buffer.readInt16BE(12) * this.gyroScalarInv + gCal.z
+        ];
+    }
+
+    scaleAccel(val: number, offset: number, scalerArr: number[]) {
+        if (val < 0) {
+            return -(val - offset) / (scalerArr[0] - offset);
+        } else {
+            return (val - offset) / (scalerArr[1] - offset);
+        }
+    }
+
+    async testDevice() {
+        var currentDeviceID = await this.getIDDevice();
+        return (currentDeviceID === MPU9250.ID_MPU_9250 || currentDeviceID === MPU9250.ID_MPU_9255);
+    }
+
+    async printGyroSettings() {
+        var FS_RANGE = ['+250dps (0)', '+500 dps (1)', '+1000 dps (2)', '+2000 dps (3)'];
+        this.debug.log('INFO', 'Gyroscope:');
+        this.debug.log('INFO', '--> Full Scale Range (0x1B): ' + FS_RANGE[await this.getFullScaleGyroRange()]);
+        this.debug.log('INFO', '--> Scalar: 1/' + (1 / this.gyroScalarInv));
+        this.debug.log('INFO', '--> Bias Offset:');
+        this.debug.log('INFO', '  --> x: ' + this._config.gyroBiasOffset.x);
+        this.debug.log('INFO', '  --> y: ' + this._config.gyroBiasOffset.y);
+        this.debug.log('INFO', '  --> z: ' + this._config.gyroBiasOffset.z);
+    }
+
+    async getFullScaleGyroRange() {
+        var byte = await this.readByte(MPU9250.RA_GYRO_CONFIG);
+        byte = byte & 0x18;
+        byte = byte >> 3;
+        return byte;
+    }
+
+    async printAccelSettings() {
+        var FS_RANGE = ['±2g (0)', '±4g (1)', '±8g (2)', '±16g (3)'];
+
+        this.debug.log('INFO', 'Accelerometer:');
+        this.debug.log('INFO', '--> Full Scale Range (0x1C): ' + FS_RANGE[await this.getFullScaleAccelRange()]);
+        this.debug.log('INFO', '--> Scalar: 1/' + (1 / this.accelScalarInv));
+        this.debug.log('INFO', '--> Calibration:');
+        this.debug.log('INFO', '  --> Offset: ');
+        this.debug.log('INFO', '    --> x: ' + this._config.accelCalibration.offset.x);
+        this.debug.log('INFO', '    --> y: ' + this._config.accelCalibration.offset.y);
+        this.debug.log('INFO', '    --> z: ' + this._config.accelCalibration.offset.z);
+        this.debug.log('INFO', '  --> Scale: ');
+        this.debug.log('INFO', '    --> x: ' + this._config.accelCalibration.scale.x);
+        this.debug.log('INFO', '    --> y: ' + this._config.accelCalibration.scale.y);
+        this.debug.log('INFO', '    --> z: ' + this._config.accelCalibration.scale.z);
+    }
+
+    async getFullScaleAccelRange() {
+        var byte = await this.readByte(MPU9250.RA_ACCEL_CONFIG_1);
+        byte = byte & 0x18;
+        byte = byte >> 3;
+        return byte;
     }
 
     async printSettings() {
@@ -288,6 +375,7 @@ class mpu9250 extends BaseDevice {
             '6 (Internal 20MHz oscillator)',
             '7 (Stops the clock and keeps timing generator in reset)'
         ];
+
         this.debug.log('INFO', 'MPU9250:');
         this.debug.log('INFO', '--> Device address: 0x' + this._config.address.toString(16));
         this.debug.log('INFO', '--> i2c bus: 0x' + (await this.getIDDevice()).toString(16));
@@ -299,13 +387,12 @@ class mpu9250 extends BaseDevice {
         this.debug.log('INFO', '  --> Clock Source: ' + CLK_RNG[await this.getClockSource()]);
         this.debug.log('INFO', '  --> Accel enabled (x, y, z): ' + this.vectorToYesNo(await this.getAccelPowerSettings()));
         this.debug.log('INFO', '  --> Gyro enabled (x, y, z): ' + this.vectorToYesNo(await this.getGyroPowerSettings()));
-
     }
-    
+
     async getGyroPowerSettings() {
         var byte = await this.readByte(MPU9250.RA_PWR_MGMT_2);
         byte = byte & 0x07;
-        
+
         return [
             (byte >> 2) & 1,    // X
             (byte >> 1) & 1,    // Y
@@ -313,10 +400,48 @@ class mpu9250 extends BaseDevice {
         ];
     }
 
+    getPitch(value: number[]){
+        return ((Math.atan2(value[0], value[2]) + Math.PI) * (180 / Math.PI)) - 180;
+    }
+
+    getRoll(value: number[]){
+        return ((Math.atan2(value[1], value[2]) + Math.PI) * (180 / Math.PI)) - 180;
+    }
+
+    getYaw(value: number[]){
+        return 0;
+    }
+
+    async getGyro(){
+        var buffer = await this.readBytes(MPU9250.GYRO_XOUT_H, 6);
+        var gCal = this._config.gyroBiasOffset;
+
+        return [
+            buffer.readInt16BE(0) * this.gyroScalarInv + gCal.x,
+            buffer.readInt16BE(2) * this.gyroScalarInv + gCal.y,
+            buffer.readInt16BE(4) * this.gyroScalarInv + gCal.z
+        ];
+    }
+
+    async getAccel() {
+        var buffer = await this.readBytes(MPU9250.ACCEL_XOUT_H, 6);
+        var aCal = this._config.accelCalibration;
+
+        var xAccel = buffer.readInt16BE(0) * this.accelScalarInv;
+        var yAccel = buffer.readInt16BE(2) * this.accelScalarInv;
+        var zAccel = buffer.readInt16BE(4) * this.accelScalarInv;
+
+        return [
+            this.scaleAccel(xAccel, aCal.offset.x, aCal.scale.x),
+            this.scaleAccel(yAccel, aCal.offset.y, aCal.scale.y),
+            this.scaleAccel(zAccel, aCal.offset.z, aCal.scale.z)
+        ];
+    }
+
     async getAccelPowerSettings() {
         var byte = await this.readByte(MPU9250.RA_PWR_MGMT_2);
         byte = byte & 0x38;
-        
+
         return [
             (byte >> 5) & 1,    // X
             (byte >> 4) & 1,    // Y
@@ -364,19 +489,20 @@ class mpu9250 extends BaseDevice {
         await sleep(100);
 
         if (await this.getByPASSEnabled()) {
-            this.ak8963 = new ak8963(this._config);
-            await this.ak8963.initialize();
+            // this.ak8963 = new ak8963(this._config);
+            // await this.ak8963.initialize();
         } else {
             this.debug.log('ERROR', 'Can\'t turn on RA_INT_PIN_CFG.');
         }
     }
 
     async getByPASSEnabled() {
-        return this.readBit(MPU9250.RA_INT_PIN_CFG, MPU9250.INTCFG_BYPASS_EN_BIT);
+        return await this.readBit(MPU9250.RA_INT_PIN_CFG, MPU9250.INTCFG_BYPASS_EN_BIT);
     }
 
     async setByPASSEnabled(bool: boolean) {
         var val = bool ? 1 : 0;
+        // await this.writeByte(MPU9250.RA_INT_PIN_CFG, 0x02)
         await this.writeBit(MPU9250.RA_INT_PIN_CFG, MPU9250.INTCFG_BYPASS_EN_BIT, val);
     }
 

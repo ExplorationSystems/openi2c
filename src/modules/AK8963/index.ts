@@ -1,6 +1,6 @@
 import * as i2c from 'i2c-bus';
 import { sleep } from '../../utils';
-import { BaseDevice } from './BaseDevice';
+import { BaseDevice } from '../BaseDevice';
 
 interface AK8963Config {
     ak_address: number;
@@ -11,9 +11,20 @@ interface AK8963Config {
     magCalibration: MagCalibration;
 }
 
+interface Offset {
+    x: number;
+    y: number;
+    z: number;
+}
+
+interface Scale {
+    x: number;
+    y: number;
+    z: number;
+}
 interface MagCalibration {
-    offset: { x: number, y: number, z: number };
-    scale: { x: number, y: number, z: number };
+    offset: Offset;
+    scale: Scale;
 }
 
 // AK8963 Map
@@ -71,22 +82,62 @@ export class ak8963 extends BaseDevice {
             magCalibration: AK8963.DEFAULT_CALIBRATION,
             ...config,
         }
-    }
 
+        this.address = this._config.ak_address;
+    }
 
     async initialize() {
         this.bus = i2c.openSync(this._config.bus).promisifiedBus();
-        await sleep(10);
+        await sleep(100);
 
         const buffer = await this.getIDDevice();
 
         if (buffer & AK8963.WHO_AM_I_RESPONSE) {
             this.getSensitivityAdjustmentValues();
-            await sleep(10);
+            await sleep(100);
             this.setCNTL(AK8963.CNTL_MODE_CONTINUE_MEASURE_2);
         } else {
             this.debug.log('ERROR', 'AK8963: Device ID is not equal to 0x' + AK8963.WHO_AM_I_RESPONSE.toString(16) + ', device value is 0x' + buffer.toString(16));
         }
+    }
+
+    async getMagAttitude() {
+        // Get the actual data
+        const buffer = await this.readBytes(AK8963.XOUT_L, 6);
+        const cal = this._config.magCalibration;
+
+        // For some reason when we read ST2 (Status 2) just after reading byte, this ensures the
+        // next reading is fresh.  If we do it before without a pause, only 1 in 15 readings will
+        // be fresh.  The setTimeout ensures this read goes to the back of the queue, once all other
+        // computation is done.
+        process.nextTick(() => this.readByte(AK8963.ST2));
+
+        return [
+            ((buffer.readInt16LE(0) * this.asax) - cal.offset.x) * cal.scale.x,
+            ((buffer.readInt16LE(2) * this.asay) - cal.offset.y) * cal.scale.y,
+            ((buffer.readInt16LE(4) * this.asaz) - cal.offset.z) * cal.scale.z
+        ];
+    }
+
+    async printSettings() {
+        const MODE_LST: Record<number, string> = {
+            0: '0x00 (Power-down mode)',
+            1: '0x01 (Single measurement mode)',
+            2: '0x02 (Continuous measurement mode 1: 8Hz)',
+            6: '0x06 (Continuous measurement mode 2: 100Hz)',
+            4: '0x04 (External trigger measurement mode)',
+            8: '0x08 (Self-test mode)',
+            15: '0x0F (Fuse ROM access mode)'
+        };
+
+        this.debug.log('INFO', 'Magnetometer (Compass):');
+        this.debug.log('INFO', '--> i2c address: 0x' + this._config.ak_address.toString(16));
+        this.debug.log('INFO', '--> Device ID: 0x' + (await this.getIDDevice()).toString(16));
+        this.debug.log('INFO', '--> Mode: ' + MODE_LST[(await this.getCNTL()) & 0x0F]);
+        this.debug.log('INFO', '--> Scalars:');
+        this.debug.log('INFO', '  --> x: ' + this.asax);
+        this.debug.log('INFO', '  --> y: ' + this.asay);
+        this.debug.log('INFO', '  --> z: ' + this.asaz);
     }
 
     /**
@@ -104,7 +155,7 @@ export class ak8963 extends BaseDevice {
         // Need to set to Fuse mode to get valid values from this.
         var currentMode = await this.getCNTL();
         this.setCNTL(AK8963.CNTL_MODE_FUSE_ROM_ACCESS);
-        await sleep(10);
+        await sleep(100);
 
         // Get the ASA* values
         this.asax = ((await this.readByte(AK8963.ASAX) - 128) * 0.5 / 128 + 1);
@@ -134,5 +185,9 @@ export class ak8963 extends BaseDevice {
 
     async getIDDevice() {
         return await this.readByte(AK8963.WHO_AM_I);
+    }
+
+    async getDataReady(){
+        return await this.readBit(AK8963.ST1, AK8963.ST1_DRDY_BIT);
     }
 }
