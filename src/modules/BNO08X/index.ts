@@ -2,7 +2,7 @@ import * as i2c from 'i2c-bus';
 import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
-import { Packet, PacketHeader } from './Packet';
+import { Packet, PacketError, PacketHeader } from './Packet';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -164,8 +164,31 @@ export class BNO08X extends Module<Config> {
 
 
     private async hardReset() { }
-    private async softReset() { 
+    /**
+     * Reset the sensor to an initial unconfigured state
+     */
+    private async softReset() {
+        this.debug.log("Soft resetting...", "");
+        const data = Buffer.from([1]);
 
+        let seq = await this.sendPacket(BNO_CHANNEL_EXE, data);
+        await sleep(500);
+        seq = await this.sendPacket(BNO_CHANNEL_EXE, data);
+        await sleep(500);
+
+        for (let i = 0; i < 3; i++) {
+            try {
+                const _packet = await this.readPacket();
+            } catch (error) {
+                if (error instanceof PacketError) {
+                    await sleep(500);
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        this.debug.log("OK!");
     }
     private async checkId(): Promise<boolean> {
         this.debug.log("\n********** READ ID **********");
@@ -509,7 +532,7 @@ export class BNO08X extends Module<Config> {
         // TODO Might be able to remove this and get header in a better way
         this.readInto(this.dataBuffer, 4);  // this is expecting a header
         const header = Packet.headerFromBuffer(this.dataBuffer);
-        
+
         let packetByteCount = header.packetByteCount;
         const channelNumber = header.channelNumber;
         const sequenceNumber = header.sequenceNumber;
@@ -517,7 +540,7 @@ export class BNO08X extends Module<Config> {
         this.sequenceNumber[channelNumber] = sequenceNumber;
         if (packetByteCount === 0) {
             this.debug.log("SKIPPING NO PACKETS AVAILABLE IN i2c._read_packet");
-            throw new Error("No packet available");
+            throw new PacketError("No packet available");
         }
 
         packetByteCount -= 4;

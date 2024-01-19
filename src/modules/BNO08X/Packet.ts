@@ -2,8 +2,11 @@ const BNO_HEADER_LEN = 4;
 const BNO_CHANNEL_CONTROL = 2;
 const BNO_CHANNEL_INPUT_SENSOR_REPORTS = 3;
 
+
+export class PacketError extends Error { }
+
 export class PacketHeader {
-    constructor(readonly channelNumber: number, readonly sequenceNumber: number, readonly dataLength: number, readonly packetByteCount: number){}
+    constructor(readonly channelNumber: number, readonly sequenceNumber: number, readonly dataLength: number, readonly packetByteCount: number) { }
 }
 
 export class Packet {
