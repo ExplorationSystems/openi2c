@@ -3,7 +3,7 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 
-export const config = {
+const defaultConfig = {
     // Module Registers
     ADDRESS: 0x40,
     MODE1: 0x00,
@@ -17,8 +17,13 @@ export const config = {
     frequency: 50
 }
 
-export class PCA9685 extends Module<typeof config> {
-    public readonly config = config;
+type Config = typeof defaultConfig;
+
+export class PCA9685 extends Module<Config> {
+    constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config?: Partial<Config>, ) {
+        super(busNumber, address, config);
+    }
+
     async init() {
         await this.setFrequency(this.config.frequency);
     }
@@ -53,3 +58,5 @@ export class PCA9685 extends Module<typeof config> {
         ]);
     }
 }
+
+export const config = defaultConfig;
