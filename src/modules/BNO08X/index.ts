@@ -149,7 +149,7 @@ export class BNO08X extends Module<Config> {
     async init() {
         for (let i = 0; i < 3; i++) {
             // this.hardReset();
-            this.softReset();
+            await this.softReset();
             try {
                 if (await this.checkId()) {
                     return;
