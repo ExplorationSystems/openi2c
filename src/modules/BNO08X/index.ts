@@ -9,7 +9,7 @@ export const defaultConfig = {
     DATA_BUFFER_SIZE: 512, // Not sure if this is nessesary in the config.
     PACKET_READ_TIMEOUT: 2.0,
 }
-type Config = typeof config;
+type Config = typeof defaultConfig;
 
 
 const BNO_CHANNEL_SHTP_COMMAND = 0;
@@ -137,7 +137,7 @@ export class BNO08X extends Module<Config> {
     private twoEndedSequenceNumbers: Record<number, number> = {};
     private dcdSavedAt: number = -1;
 
-    constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config?: Partial<Config>,) {
+    constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config: Partial<Config> = defaultConfig) {
         super(busNumber, address, config);
 
         this.dataBuffer = Buffer.alloc(this.config.DATA_BUFFER_SIZE);
@@ -168,7 +168,7 @@ export class BNO08X extends Module<Config> {
      * Reset the sensor to an initial unconfigured state
      */
     private async softReset() {
-        this.debug.log("Soft resetting...", "");
+        this.debug("Soft resetting...", "");
         const data = Buffer.from([1]);
 
         let seq = await this.sendPacket(BNO_CHANNEL_EXE, data);
@@ -188,10 +188,10 @@ export class BNO08X extends Module<Config> {
             }
         }
 
-        this.debug.log("OK!");
+        this.debug("OK!");
     }
     private async checkId(): Promise<boolean> {
-        this.debug.log("\n********** READ ID **********");
+        this.debug("\n********** READ ID **********");
         if (this.idRead) {
             return true;
         }
@@ -201,10 +201,10 @@ export class BNO08X extends Module<Config> {
             0, // padding
         ]);
 
-        this.debug.log("\n** Sending ID Request Report **");
+        this.debug("\n** Sending ID Request Report **");
         await this.sendPacket(BNO_CHANNEL_CONTROL, data);
 
-        this.debug.log("\n** Waiting for packet **");
+        this.debug("\n** Waiting for packet **");
         // _a_ packet arrived, but which one?
         // TODO this could cause an infinite loop? False never reached?
         while (true) {
@@ -214,7 +214,7 @@ export class BNO08X extends Module<Config> {
                 this.idRead = true;
                 return true;
             }
-            this.debug.log("Packet didn't have sensor ID report, trying again");
+            this.debug("Packet didn't have sensor ID report, trying again");
         }
 
         return false;
@@ -232,16 +232,16 @@ export class BNO08X extends Module<Config> {
         const swPartNumber = dataBuffer.readUInt32LE(4);
         const swBuildNumber = dataBuffer.readUInt32LE(8);
 
-        this.debug.log("FROM PACKET SLICE:");
-        this.debug.log(`*** Part Number: ${swPartNumber}`);
-        this.debug.log(`*** Software Version: ${swMajor}.${swMinor}.${swPatch}`);
-        this.debug.log(`\tBuild: ${swBuildNumber}`);
+        this.debug("FROM PACKET SLICE:");
+        this.debug(`*** Part Number: ${swPartNumber}`);
+        this.debug(`*** Software Version: ${swMajor}.${swMinor}.${swPatch}`);
+        this.debug(`\tBuild: ${swBuildNumber}`);
 
         return swPartNumber;
     }
 
     private async waitForPacketType(channelNumber: number, reportId: number | null = null, timeout: number = 5.0): Promise<Packet> {
-        this.debug.log(`** Waiting for packet on channel ${channelNumber}${reportId ? ` with report id ${reportId.toString(16)}` : ""}`);
+        this.debug(`** Waiting for packet on channel ${channelNumber}${reportId ? ` with report id ${reportId.toString(16)}` : ""}`);
 
         let start_time = Date.now();
 
@@ -259,7 +259,7 @@ export class BNO08X extends Module<Config> {
                 }
             }
             if (![BNO_CHANNEL_EXE, BNO_CHANNEL_SHTP_COMMAND].includes(newPacket.channelNumber)) {
-                this.debug.log("passing packet to handler for de-slicing");
+                this.debug("passing packet to handler for de-slicing");
                 this.handlePacket(newPacket);
             }
         }
@@ -377,7 +377,7 @@ export class BNO08X extends Module<Config> {
             return;
         }
 
-        // this.debug.log("\tProcessing report:", reports[report_id]);
+        // this.debug("\tProcessing report:", reports[report_id]);
         // if (this._debug) {
         //     let outstr = "";
         //     for (let idx = 0; idx < report_bytes.length; idx++) {
@@ -524,7 +524,7 @@ export class BNO08X extends Module<Config> {
     private async readHeader(): Promise<PacketHeader> {
         this.readInto(this.dataBuffer, 4); // this is expecting a header
         const packetHeader = Packet.headerFromBuffer(this.dataBuffer);
-        this.debug.log(packetHeader);
+        this.debug(packetHeader);
         return packetHeader;
     }
 
@@ -539,12 +539,12 @@ export class BNO08X extends Module<Config> {
 
         this.sequenceNumber[channelNumber] = sequenceNumber;
         if (packetByteCount === 0) {
-            this.debug.log("SKIPPING NO PACKETS AVAILABLE IN i2c._read_packet");
+            this.debug("SKIPPING NO PACKETS AVAILABLE IN i2c._read_packet");
             throw new PacketError("No packet available");
         }
 
         packetByteCount -= 4;
-        this.debug.log(
+        this.debug(
             "channel",
             channelNumber,
             "has",
@@ -555,7 +555,7 @@ export class BNO08X extends Module<Config> {
         await this.read(packetByteCount);
 
         const newPacket = new Packet(this.dataBuffer);
-        this.debug.log(newPacket);
+        this.debug(newPacket);
 
         this.updateSequenceNumber(newPacket);
 
@@ -569,12 +569,12 @@ export class BNO08X extends Module<Config> {
     }
 
     private async read(requestedReadLength: number) {
-        this.debug.log("trying to read", requestedReadLength, "bytes");
+        this.debug("trying to read", requestedReadLength, "bytes");
         // +4 for the header
         const totalReadLength = requestedReadLength + 4;
         if (totalReadLength > this.config.DATA_BUFFER_SIZE) {
             this.dataBuffer = Buffer.alloc(totalReadLength);
-            this.debug.log(
+            this.debug(
                 `!!!!!!!!!!!! ALLOCATION: increased _data_buffer to Uint8Array(${totalReadLength}) !!!!!!!!!!!!!`
             );
         }
@@ -585,7 +585,7 @@ export class BNO08X extends Module<Config> {
         let header = await this.readHeader();
 
         if (header.channelNumber > 5) {
-            this.debug.log("channel number out of range:", header.channelNumber);
+            this.debug("channel number out of range:", header.channelNumber);
         }
 
         let ready: boolean;
@@ -617,8 +617,8 @@ export class BNO08X extends Module<Config> {
         });
 
         const packet = new Packet(buffer);
-        this.debug.log("Sending packet:");
-        this.debug.log(packet);
+        this.debug("Sending packet:");
+        this.debug(packet);
 
         await this.write(buffer);
 

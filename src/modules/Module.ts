@@ -1,10 +1,11 @@
 import * as i2c from 'i2c-bus';
 import { debug } from '../debug';
+import { type Debugger } from 'debug';
 
 export abstract class Module<T extends Record<any, any>> {
     public readonly bus!: i2c.PromisifiedBus;
     public readonly config: T = {} as T;
-    public readonly debug!: debug.Debugger;
+    public readonly debug!: Debugger;
     public readonly address!: number;
 
 
@@ -42,7 +43,7 @@ export abstract class Module<T extends Record<any, any>> {
     async writeByte(adrs: number, value: number) {
         await this.bus.writeByte(this.address, adrs, value);
     }
-    
+
     async writeBytes(adrs: number, buf: Buffer) {
         await this.bus.writeI2cBlock(this.address, adrs, buf.length, buf);
     }
