@@ -1,22 +1,31 @@
-const BNO_HEADER_LEN = 4;
-const BNO_CHANNEL_CONTROL = 2;
-const BNO_CHANNEL_INPUT_SENSOR_REPORTS = 3;
-
+import { BNO_HEADER_LEN } from "./constants";
 
 export class PacketError extends Error { }
 
 export class PacketHeader {
-    constructor(readonly channelNumber: number, readonly sequenceNumber: number, readonly dataLength: number, readonly packetByteCount: number) { }
+    readonly channelNumber: number;
+    readonly sequenceNumber: number;
+    readonly dataLength: number;
+    readonly packetByteCount: number;
+    readonly data: Buffer;
+
+    constructor(data: Buffer) {
+        this.data = data.subarray(0, BNO_HEADER_LEN);
+        this.packetByteCount = data.readUInt16LE(0) & ~0x8000;
+        this.channelNumber = data.readUInt8(2);
+        this.sequenceNumber = data.readUInt8(3);
+        this.dataLength = Math.max(0, this.packetByteCount - 4);
+    }
 }
 
 export class Packet {
-    header: PacketHeader;
-    data: Buffer;
+    readonly header: PacketHeader;
+    readonly data: Buffer;
 
-    constructor(packetBytes: Buffer) {
-        this.header = Packet.headerFromBuffer(packetBytes);
+    constructor(data: Buffer) {
+        this.header = Packet.headerFromBuffer(data);
         const dataEndIndex = this.header.dataLength + BNO_HEADER_LEN;
-        this.data = packetBytes.subarray(BNO_HEADER_LEN, dataEndIndex);
+        this.data = data.subarray(BNO_HEADER_LEN, dataEndIndex);
     }
 
     // toString(): string {
@@ -72,11 +81,7 @@ export class Packet {
     }
 
     static headerFromBuffer(packetBytes: Buffer): PacketHeader {
-        const packetByteCount = packetBytes.readUInt16LE(0) & ~0x8000;
-        const channelNumber = packetBytes.readUInt8(2);
-        const sequenceNumber = packetBytes.readUInt8(3);
-        const dataLength = Math.max(0, packetByteCount - 4);
-        return new PacketHeader(channelNumber, sequenceNumber, dataLength, packetByteCount);
+        return new PacketHeader(packetBytes);
     }
 
     static isError(header: PacketHeader): boolean {

@@ -3,6 +3,7 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
+import { BNO_CHANNEL_EXE, SHTP_REPORT_PRODUCT_ID_REQUEST, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -11,114 +12,6 @@ export const defaultConfig = {
 }
 type Config = typeof defaultConfig;
 
-
-const BNO_CHANNEL_SHTP_COMMAND = 0;
-const BNO_CHANNEL_EXE = 1;
-const BNO_CHANNEL_CONTROL = 2;
-const BNO_CHANNEL_INPUT_SENSOR_REPORTS = 3;
-const BNO_CHANNEL_WAKE_INPUT_SENSOR_REPORTS = 4;
-const BNO_CHANNEL_GYRO_ROTATION_VECTOR = 5;
-// Calibrated Acceleration (m/s2)
-const BNO_REPORT_ACCELEROMETER = 0x01;
-// Calibrated gyroscope (rad/s).
-const BNO_REPORT_GYROSCOPE = 0x02;
-// Magnetic field calibrated (in µTesla). The fully calibrated magnetic field measurement.
-const BNO_REPORT_MAGNETOMETER = 0x03;
-// Linear acceleration (m/s2). Acceleration of the device with gravity removed
-const BNO_REPORT_LINEAR_ACCELERATION = 0x04;
-// Rotation Vector
-const BNO_REPORT_ROTATION_VECTOR = 0x05;
-// Gravity Vector (m/s2). Vector direction of gravity
-const BNO_REPORT_GRAVITY = 0x06;
-// Game Rotation Vector
-const BNO_REPORT_GAME_ROTATION_VECTOR = 0x08;
-const BNO_REPORT_GEOMAGNETIC_ROTATION_VECTOR = 0x09;
-const BNO_REPORT_STEP_COUNTER = 0x11;
-const BNO_REPORT_RAW_ACCELEROMETER = 0x14;
-const BNO_REPORT_RAW_GYROSCOPE = 0x15;
-const BNO_REPORT_RAW_MAGNETOMETER = 0x16;
-const BNO_REPORT_SHAKE_DETECTOR = 0x19;
-const BNO_REPORT_STABILITY_CLASSIFIER = 0x13;
-const BNO_REPORT_ACTIVITY_CLASSIFIER = 0x1E;
-const BNO_REPORT_GYRO_INTEGRATED_ROTATION_VECTOR = 0x2A; // TODO Should this be added to the list of available reports?
-
-const SHTP_REPORT_PRODUCT_ID_RESPONSE = 0xF8;
-const SHTP_REPORT_PRODUCT_ID_REQUEST = 0xF9;
-
-const GET_FEATURE_REQUEST = 0xFE;
-const SET_FEATURE_COMMAND = 0xFD;
-const GET_FEATURE_RESPONSE = 0xFC;
-const BASE_TIMESTAMP = 0xFB;
-const TIMESTAMP_REBASE = 0xFA;
-const COMMAND_REQUEST = 0xF2;
-const COMMAND_RESPONSE = 0xF1;
-
-// DCD/ ME Calibration commands and sub-commands
-const SAVE_DCD = 0x6;
-const ME_CALIBRATE = 0x7;
-const ME_CAL_CONFIG = 0x00;
-const ME_GET_CAL = 0x01;
-
-const Q_POINT_14_SCALAR = 2 ** (14 * -1);
-const Q_POINT_12_SCALAR = 2 ** (12 * -1);
-//const Q_POINT_10_SCALAR = 2 ** (10 * -1)
-const Q_POINT_9_SCALAR = 2 ** (9 * -1);
-const Q_POINT_8_SCALAR = 2 ** (8 * -1);
-const Q_POINT_4_SCALAR = 2 ** (4 * -1);
-
-// these raw reports require their counterpart to be enabled
-const RAW_REPORTS: Record<number, number> = {
-    [BNO_REPORT_RAW_ACCELEROMETER]: BNO_REPORT_ACCELEROMETER,
-    [BNO_REPORT_RAW_GYROSCOPE]: BNO_REPORT_GYROSCOPE,
-    [BNO_REPORT_RAW_MAGNETOMETER]: BNO_REPORT_MAGNETOMETER,
-}
-
-const AVAIL_SENSOR_REPORTS: Record<number, [number, number, number]> = {
-    [BNO_REPORT_ACCELEROMETER]: [Q_POINT_8_SCALAR, 3, 10],
-    [BNO_REPORT_GRAVITY]: [Q_POINT_8_SCALAR, 3, 10],
-    [BNO_REPORT_GYROSCOPE]: [Q_POINT_9_SCALAR, 3, 10],
-    [BNO_REPORT_MAGNETOMETER]: [Q_POINT_4_SCALAR, 3, 10],
-    [BNO_REPORT_LINEAR_ACCELERATION]: [Q_POINT_8_SCALAR, 3, 10],
-    [BNO_REPORT_ROTATION_VECTOR]: [Q_POINT_14_SCALAR, 4, 14],
-    [BNO_REPORT_GEOMAGNETIC_ROTATION_VECTOR]: [Q_POINT_12_SCALAR, 4, 14],
-    [BNO_REPORT_GAME_ROTATION_VECTOR]: [Q_POINT_14_SCALAR, 4, 12],
-    [BNO_REPORT_STEP_COUNTER]: [1, 1, 12],
-    [BNO_REPORT_SHAKE_DETECTOR]: [1, 1, 6],
-    [BNO_REPORT_STABILITY_CLASSIFIER]: [1, 1, 6],
-    [BNO_REPORT_ACTIVITY_CLASSIFIER]: [1, 1, 16],
-    [BNO_REPORT_RAW_ACCELEROMETER]: [1, 3, 16],
-    [BNO_REPORT_RAW_GYROSCOPE]: [1, 3, 16],
-    [BNO_REPORT_RAW_MAGNETOMETER]: [1, 3, 16],
-}
-
-const REPORT_LENGTHS: Record<number, number> = {
-    [SHTP_REPORT_PRODUCT_ID_RESPONSE]: 16,
-    // [SHTP_REPORT_PRODUCT_ID_REQUEST]: 16, // This wasn't here in the original code, but it seems like it should be because the origional duplicate SHTP_REPORT_PRODUCT_ID_RESPONSE, not sure if the value is correct.
-    [GET_FEATURE_RESPONSE]: 17,
-    [COMMAND_RESPONSE]: 16,
-    [BASE_TIMESTAMP]: 5,
-    [TIMESTAMP_REBASE]: 5,
-}
-
-const INITIAL_REPORTS: Record<number, any> = {
-    [BNO_REPORT_ACTIVITY_CLASSIFIER]: {
-        "Tilting": -1,
-        "most_likely": "Unknown",
-        "OnStairs": -1,
-        "On-Foot": -1,
-        "Other": -1,
-        "On-Bicycle": -1,
-        "Still": -1,
-        "Walking": -1,
-        "Unknown": -1,
-        "Running": -1,
-        "In-Vehicle": -1,
-    },
-    [BNO_REPORT_STABILITY_CLASSIFIER]: "Unknown",
-    [BNO_REPORT_ROTATION_VECTOR]: [0.0, 0.0, 0.0, 0.0],
-    [BNO_REPORT_GAME_ROTATION_VECTOR]: [0.0, 0.0, 0.0, 0.0],
-    [BNO_REPORT_GEOMAGNETIC_ROTATION_VECTOR]: [0.0, 0.0, 0.0, 0.0],
-}
 
 export class BNO08X extends Module<Config> {
     private dataBuffer: Buffer;
@@ -149,7 +42,7 @@ export class BNO08X extends Module<Config> {
     async init() {
         for (let i = 0; i < 3; i++) {
             // this.hardReset();
-            await this.softReset();
+            // await this.softReset();
             try {
                 if (await this.checkId()) {
                     return;
@@ -240,7 +133,7 @@ export class BNO08X extends Module<Config> {
         return swPartNumber;
     }
 
-    private async waitForPacketType(channelNumber: number, reportId: number | null = null, timeout: number = 5.0): Promise<Packet> {
+    private async waitForPacketType(channelNumber: number, reportId: number | null = null, timeout: number = 5000.0): Promise<Packet> {
         this.debug(`** Waiting for packet on channel ${channelNumber}${reportId ? ` with report id ${reportId.toString(16)}` : ""}`);
 
         let start_time = Date.now();
@@ -511,9 +404,9 @@ export class BNO08X extends Module<Config> {
         let start_time = Date.now();
         // TODO make these async somehow.
         while ((Date.now() - start_time) / 1000 < timeout) {
-            if (!this.dataReady()) {
-                continue;
-            }
+            // if (!await this.dataReady()) {
+            //     continue;
+            // }
             let newPacket = await this.readPacket();
             return newPacket;
         }
@@ -522,6 +415,8 @@ export class BNO08X extends Module<Config> {
     }
 
     private async readHeader(): Promise<PacketHeader> {
+        // const buffer = Buffer.alloc(4);
+        // this.readInto(buffer, 4);
         this.readInto(this.dataBuffer, 4); // this is expecting a header
         const packetHeader = Packet.headerFromBuffer(this.dataBuffer);
         this.debug(packetHeader);
@@ -530,31 +425,43 @@ export class BNO08X extends Module<Config> {
 
     private async readPacket(): Promise<Packet> {
         // TODO Might be able to remove this and get header in a better way
-        this.readInto(this.dataBuffer, 4);  // this is expecting a header
-        const header = Packet.headerFromBuffer(this.dataBuffer);
+        // await this.readInto(this.dataBuffer, 4);  // this is expecting a header
+        // const header = Packet.headerFromBuffer(this.dataBuffer);
 
-        let packetByteCount = header.packetByteCount;
-        const channelNumber = header.channelNumber;
-        const sequenceNumber = header.sequenceNumber;
+        // let packetByteCount = header.packetByteCount;
+        // const channelNumber = header.channelNumber;
+        // const sequenceNumber = header.sequenceNumber;
 
-        this.sequenceNumber[channelNumber] = sequenceNumber;
-        if (packetByteCount === 0) {
-            this.debug("SKIPPING NO PACKETS AVAILABLE IN i2c._read_packet");
-            throw new PacketError("No packet available");
-        }
+        // this.sequenceNumber[channelNumber] = sequenceNumber;
+        // if (packetByteCount === 0) {
+        //     this.debug("SKIPPING NO PACKETS AVAILABLE IN i2c._read_packet");
+        //     throw new PacketError("No packet available");
+        // }
 
-        packetByteCount -= 4;
-        this.debug(
-            "channel",
-            channelNumber,
-            "has",
-            packetByteCount,
-            "bytes available to read",
-        );
+        // packetByteCount -= 4;
+        // this.debug(
+        //     "channel",
+        //     channelNumber,
+        //     "has",
+        //     packetByteCount,
+        //     "bytes available to read",
+        // );
+        // const header = await this.readHeader();
 
-        await this.read(packetByteCount);
+        // HERE Have commented out is ready to see if it's receiving the data from the sensor and messing up all the other reads.
+        // I think we need to read the data as it comes in and then parse it into packets.
+        const headerData = Buffer.alloc(4);
+        await this.readInto(headerData, buffer.length);
 
-        const newPacket = new Packet(this.dataBuffer);
+        // let packetByteCount = header.packetByteCount - 4;
+        
+        const buffer = Buffer.alloc(512);
+        await this.readInto(buffer, buffer.length);
+        
+        const newPacket = new Packet(buffer);
+        // await this.read(packetByteCount);
+        
+        // const newPacket = new Packet(this.dataBuffer);
         this.debug(newPacket);
 
         this.updateSequenceNumber(newPacket);
@@ -578,7 +485,8 @@ export class BNO08X extends Module<Config> {
                 `!!!!!!!!!!!! ALLOCATION: increased _data_buffer to Uint8Array(${totalReadLength}) !!!!!!!!!!!!!`
             );
         }
-        this.readInto(this.dataBuffer, totalReadLength);
+
+        await this.readInto(this.dataBuffer, totalReadLength);
     }
 
     private async dataReady() {
@@ -608,11 +516,12 @@ export class BNO08X extends Module<Config> {
         const writeLength = dataLength + 4;
 
         const buffer = Buffer.alloc(writeLength);
-        buffer.writeUInt16LE(writeLength, 0);
+        buffer.writeUInt16LE(writeLength, 0); // packet length MSB and LSB
         buffer[2] = channel;
         buffer[3] = this.sequenceNumber[channel];
 
         data.forEach((byte, idx) => {
+            // Write the data into the buffer after the header
             buffer[4 + idx] = byte;
         });
 
@@ -622,7 +531,7 @@ export class BNO08X extends Module<Config> {
 
         await this.write(buffer);
 
-        this.sequenceNumber[channel] = (this.sequenceNumber[channel] + 1) % 256;
+        this.sequenceNumber[channel] = (this.sequenceNumber[channel] + 1) % 256; // Sequence number per channel that resets after 255
         return this.sequenceNumber[channel];
     }
 }
