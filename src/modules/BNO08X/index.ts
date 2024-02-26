@@ -3,7 +3,7 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
-import { BNO_CHANNEL_EXE, SHTP_REPORT_PRODUCT_ID_REQUEST, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS } from './constants';
+import { BNO_CHANNEL_EXE, SHTP_REPORT_PRODUCT_ID_REQUEST, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -42,7 +42,7 @@ export class BNO08X extends Module<Config> {
     async init() {
         for (let i = 0; i < 3; i++) {
             // this.hardReset();
-            // await this.softReset();
+            await this.softReset();
             try {
                 if (await this.checkId()) {
                     return;
@@ -64,9 +64,7 @@ export class BNO08X extends Module<Config> {
         this.debug("Soft resetting...", "");
         const data = Buffer.from([1]);
 
-        let seq = await this.sendPacket(BNO_CHANNEL_EXE, data);
-        await sleep(500);
-        seq = await this.sendPacket(BNO_CHANNEL_EXE, data);
+        await this.sendPacket(BNO_CHANNEL_EXE, data);
         await sleep(500);
 
         for (let i = 0; i < 3; i++) {
@@ -101,8 +99,8 @@ export class BNO08X extends Module<Config> {
         // _a_ packet arrived, but which one?
         // TODO this could cause an infinite loop? False never reached?
         while (true) {
-            await this.waitForPacketType(BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE);
-            let sensorId = this.parseSensorId();
+            const packet = await this.waitForPacketType(BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE);
+            let sensorId = this.parseSensorId(packet);
             if (sensorId) {
                 this.idRead = true;
                 return true;
@@ -113,17 +111,16 @@ export class BNO08X extends Module<Config> {
         return false;
     }
 
-    private parseSensorId(dataBuffer?: Buffer): number | null {
-        dataBuffer = dataBuffer || this.dataBuffer;
-        if (dataBuffer[4] !== SHTP_REPORT_PRODUCT_ID_RESPONSE) {
+    private parseSensorId(packet: Packet): number | null {
+        if (packet.data[0] !== SHTP_REPORT_PRODUCT_ID_RESPONSE) {
             return null;
         }
 
-        const swMajor = dataBuffer.readUInt8(2);
-        const swMinor = dataBuffer.readUInt8(3);
-        const swPatch = dataBuffer.readUInt16LE(12);
-        const swPartNumber = dataBuffer.readUInt32LE(4);
-        const swBuildNumber = dataBuffer.readUInt32LE(8);
+        const swMajor = packet.data.readUInt8(2);
+        const swMinor = packet.data.readUInt8(3);
+        const swPatch = packet.data.readUInt16LE(12);
+        const swPartNumber = packet.data.readUInt32LE(4);
+        const swBuildNumber = packet.data.readUInt32LE(8);
 
         this.debug("FROM PACKET SLICE:");
         this.debug(`*** Part Number: ${swPartNumber}`);
@@ -234,13 +231,13 @@ export class BNO08X extends Module<Config> {
     }
 
     private handleControlReport(reportId: number, reportBytes: Buffer): void {
-        if (reportId === SHTP_REPORT_PRODUCT_ID_RESPONSE) {
-            // in origional code: _parse_sensor_id in main file not in class
-            const sensorId = this.parseSensorId(reportBytes);
-            if (!sensorId) {
-                throw new Error(`Wrong report id for sensor id: ${reportBytes[0].toString(16)}`);
-            }
-        }
+        // if (reportId === SHTP_REPORT_PRODUCT_ID_RESPONSE) {
+        //     // in origional code: _parse_sensor_id in main file not in class
+        //     const sensorId = this.parseSensorId(reportBytes);
+        //     if (!sensorId) {
+        //         throw new Error(`Wrong report id for sensor id: ${reportBytes[0].toString(16)}`);
+        //     }
+        // }
 
         if (reportId === GET_FEATURE_RESPONSE) {
             // in origional code: _parse_get_feature_response_report
@@ -404,9 +401,9 @@ export class BNO08X extends Module<Config> {
         let start_time = Date.now();
         // TODO make these async somehow.
         while ((Date.now() - start_time) / 1000 < timeout) {
-            // if (!await this.dataReady()) {
-            //     continue;
-            // }
+            if (!await this.dataReady()) {
+                continue;
+            }
             let newPacket = await this.readPacket();
             return newPacket;
         }
@@ -415,10 +412,10 @@ export class BNO08X extends Module<Config> {
     }
 
     private async readHeader(): Promise<PacketHeader> {
-        // const buffer = Buffer.alloc(4);
-        // this.readInto(buffer, 4);
-        this.readInto(this.dataBuffer, 4); // this is expecting a header
-        const packetHeader = Packet.headerFromBuffer(this.dataBuffer);
+        const buffer = Buffer.alloc(BNO_HEADER_LEN);
+        await this.readInto(buffer,  buffer.length);
+        // this.readInto(this.dataBuffer, 4); // this is expecting a header
+        const packetHeader = Packet.headerFromBuffer(buffer);
         this.debug(packetHeader);
         return packetHeader;
     }
@@ -450,28 +447,31 @@ export class BNO08X extends Module<Config> {
 
         // HERE Have commented out is ready to see if it's receiving the data from the sensor and messing up all the other reads.
         // I think we need to read the data as it comes in and then parse it into packets.
-        const headerData = Buffer.alloc(4);
-        await this.readInto(headerData, buffer.length);
+        // const headerData = Buffer.alloc(4);
+        // await this.readInto(headerData, headerData.length);
 
         // let packetByteCount = header.packetByteCount - 4;
-        
-        const buffer = Buffer.alloc(512);
+        const header = await this.readHeader();
+        // this.updateSequenceNumber(header);
+
+        const buffer = Buffer.alloc(header.packetByteCount);
         await this.readInto(buffer, buffer.length);
         
-        const newPacket = new Packet(buffer);
+        const packet = new Packet(buffer);
         // await this.read(packetByteCount);
         
         // const newPacket = new Packet(this.dataBuffer);
-        this.debug(newPacket);
+        this.debug(packet);
 
-        this.updateSequenceNumber(newPacket);
+        // this.updateSequenceNumber(packet.header);
 
-        return newPacket;
+        return packet;
     }
 
-    private updateSequenceNumber(newPacket: Packet): void {
-        const channel = newPacket.channelNumber;
-        const seq = newPacket.header.sequenceNumber;
+    // This might no be nessesary since directions have different sequence numbers. Do we need to read with the same sequence number?
+    private updateSequenceNumber(packetHeader: PacketHeader): void {
+        const channel = packetHeader.channelNumber;
+        const seq = packetHeader.sequenceNumber;
         this.sequenceNumber[channel] = seq;
     }
 

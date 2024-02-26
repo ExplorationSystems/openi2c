@@ -5,19 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch Program",
             "type": "node",
             "request": "launch",
-            "name": "Launch TypeScript with ts-node",
-            "runtimeArgs": [
-                "-r",
-                "ts-node/register"
-            ],
+            "runtimeExecutable": "node",
+            "runtimeArgs": ["--nolazy", "-r", "ts-node/register/transpile-only"],
+      
             "args": [
-                "${file}"
-            ],
-            "skipFiles": [
-                "<node_internals>/**"
-            ]
-        }
+                "${workspaceFolder}/src/modules/BNO08X/example.ts"
+              ],
+            "cwd": "${workspaceRoot}",
+            "internalConsoleOptions": "openOnSessionStart",
+            "skipFiles": ["<node_internals>/**", "node_modules/**"]
+          },
     ]
 }
