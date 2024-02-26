@@ -41,6 +41,14 @@ export const TIMESTAMP_REBASE = 0xFA;
 export const COMMAND_REQUEST = 0xF2;
 export const COMMAND_RESPONSE = 0xF1;
 
+export const DEFAULT_REPORT_INTERVAL = 50000;  // in microseconds = 50ms
+export const QUAT_READ_TIMEOUT = 0.500;  // timeout in seconds
+export const PACKET_READ_TIMEOUT = 2.000;  // timeout in seconds
+export const FEATURE_ENABLE_TIMEOUT = 2.0;
+export const DEFAULT_TIMEOUT = 2.0;
+export const BNO08X_CMD_RESET = 0x01;
+export const QUAT_Q_POINT = 14;
+
 // DCD/ ME Calibration commands and sub-commands
 export const SAVE_DCD = 0x6;
 export const ME_CALIBRATE = 0x7;
@@ -109,3 +117,5 @@ export const INITIAL_REPORTS: Record<number, any> = {
     [BNO_REPORT_GAME_ROTATION_VECTOR]: [0.0, 0.0, 0.0, 0.0],
     [BNO_REPORT_GEOMAGNETIC_ROTATION_VECTOR]: [0.0, 0.0, 0.0, 0.0],
 }
+
+export const ENABLED_ACTIVITIES = 0x1FF; // All activities; 1 bit set for each of 8 activities, + Unknown

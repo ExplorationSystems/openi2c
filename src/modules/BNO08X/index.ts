@@ -3,7 +3,8 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
-import { BNO_CHANNEL_EXE, SHTP_REPORT_PRODUCT_ID_REQUEST, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN } from './constants';
+export * from './constants';
+import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -55,6 +56,79 @@ export class BNO08X extends Module<Config> {
         throw new Error("Could not read ID");
     }
 
+    getFeatureEnableReport(
+        featureId: keyof typeof AVAIL_SENSOR_REPORTS,
+        sensorSpecificConfig: number = 0,
+        reportInterval: number = DEFAULT_REPORT_INTERVAL,
+    ): Buffer {
+        let setFeatureReport = Buffer.alloc(17);
+        setFeatureReport[0] = SET_FEATURE_COMMAND;
+        setFeatureReport[1] = featureId;
+        setFeatureReport.writeUInt32LE(reportInterval, 5);
+        setFeatureReport.writeUInt32LE(sensorSpecificConfig, 13);
+    
+        return setFeatureReport;
+    }
+
+    /**
+     * Used to enable a given feature of the BNO08x
+     */
+    async enableFeature(featureId: keyof typeof AVAIL_SENSOR_REPORTS) {
+        this.debug("\n********** Enabling feature id:", featureId, "**********")
+
+        let setFeatureReport: Buffer;
+        if (featureId === BNO_REPORT_ACTIVITY_CLASSIFIER) {
+            setFeatureReport = this.getFeatureEnableReport(featureId, ENABLED_ACTIVITIES);
+        } else {
+            setFeatureReport = this.getFeatureEnableReport(featureId);
+        }
+
+        let featureDependency = RAW_REPORTS[featureId]; //rawReports.get(featureId, null);
+
+        if (featureDependency && !(featureDependency in this.readings)) {
+            this.debug("Enabling feature dependency:", featureDependency);
+            await this.enableFeature(featureDependency);
+        }
+        // if the feature was enabled it will have a key in the readings dict
+
+        this.debug("Enabling", featureId);
+        this.sendPacket(BNO_CHANNEL_CONTROL, setFeatureReport);
+    
+        let startTime = Date.now();  // 1
+
+        while ((Date.now() - startTime) < FEATURE_ENABLE_TIMEOUT) {
+            await this.processAvailablePackets(10);
+            if (featureId in this.readings) {
+                return;
+            }
+        }
+        throw new Error("Was not able to enable feature " + featureId);
+    
+    }
+
+    async processAvailablePackets(maxPackets: number | null = null) {
+        let processedCount = 0;
+        while (await this.dataReady()) {
+            if (maxPackets && processedCount > maxPackets) {
+                return;
+            }
+
+            let packet:Packet;
+            try {
+                packet = await this.readPacket();
+            } catch (error) {
+                if (error instanceof PacketError) {
+                    continue;
+                } else {
+                    throw error;
+                }
+            }
+
+            this.handlePacket(packet);
+            processedCount += 1;
+        }
+        this.debug(" ** DONE! **");
+    }
 
     private async hardReset() { }
     /**
@@ -413,7 +487,7 @@ export class BNO08X extends Module<Config> {
 
     private async readHeader(): Promise<PacketHeader> {
         const buffer = Buffer.alloc(BNO_HEADER_LEN);
-        await this.readInto(buffer,  buffer.length);
+        await this.readInto(buffer, buffer.length);
         // this.readInto(this.dataBuffer, 4); // this is expecting a header
         const packetHeader = Packet.headerFromBuffer(buffer);
         this.debug(packetHeader);
@@ -456,10 +530,10 @@ export class BNO08X extends Module<Config> {
 
         const buffer = Buffer.alloc(header.packetByteCount);
         await this.readInto(buffer, buffer.length);
-        
+
         const packet = new Packet(buffer);
         // await this.read(packetByteCount);
-        
+
         // const newPacket = new Packet(this.dataBuffer);
         this.debug(packet);
 
