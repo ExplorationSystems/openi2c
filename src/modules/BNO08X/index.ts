@@ -125,7 +125,7 @@ export class BNO08X extends Module<Config> {
         this.debug("FROM PACKET SLICE:");
         this.debug(`*** Part Number: ${swPartNumber}`);
         this.debug(`*** Software Version: ${swMajor}.${swMinor}.${swPatch}`);
-        this.debug(`\tBuild: ${swBuildNumber}`);
+        this.debug(`*** Build: ${swBuildNumber}`);
 
         return swPartNumber;
     }
