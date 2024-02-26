@@ -4,7 +4,7 @@ import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
 export * from './constants';
-import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN } from './constants';
+import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -66,7 +66,7 @@ export class BNO08X extends Module<Config> {
         setFeatureReport[1] = featureId;
         setFeatureReport.writeUInt32LE(reportInterval, 5);
         setFeatureReport.writeUInt32LE(sensorSpecificConfig, 13);
-    
+
         return setFeatureReport;
     }
 
@@ -92,8 +92,8 @@ export class BNO08X extends Module<Config> {
         // if the feature was enabled it will have a key in the readings dict
 
         this.debug("Enabling", featureId);
-        this.sendPacket(BNO_CHANNEL_CONTROL, setFeatureReport);
-    
+        await this.sendPacket(BNO_CHANNEL_CONTROL, setFeatureReport);
+
         let startTime = Date.now();  // 1
 
         while ((Date.now() - startTime) < FEATURE_ENABLE_TIMEOUT) {
@@ -103,7 +103,16 @@ export class BNO08X extends Module<Config> {
             }
         }
         throw new Error("Was not able to enable feature " + featureId);
-    
+
+    }
+
+    async acceleration(): Promise<[number, number, number]> {
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_ACCELEROMETER]) {
+            return this.readings[BNO_REPORT_ACCELEROMETER];
+        } else {
+            throw new Error("No accel report found, is it enabled?");
+        }
     }
 
     async processAvailablePackets(maxPackets: number | null = null) {
@@ -113,7 +122,7 @@ export class BNO08X extends Module<Config> {
                 return;
             }
 
-            let packet:Packet;
+            let packet: Packet;
             try {
                 packet = await this.readPacket();
             } catch (error) {
@@ -239,7 +248,8 @@ export class BNO08X extends Module<Config> {
         return REPORT_LENGTHS[report_id];
     }
 
-    private separateBatch(packet: Packet, reportSlices: [number, Buffer][]): void {
+    private separateBatch(packet: Packet) {
+        const reportSlices: [number, Buffer][] = [];
         // get first report id, loop up its report length
         // read that many bytes, parse them
         let nextByteIndex = 0;
@@ -260,13 +270,15 @@ export class BNO08X extends Module<Config> {
             reportSlices.push([reportSlice[0], reportSlice]);
             nextByteIndex = nextByteIndex + requiredBytes;
         }
+
+        return reportSlices;
     }
 
     private handlePacket(packet: Packet): void {
         try {
-            this.separateBatch(packet, this.packetSlices);
-            while (this.packetSlices.length > 0) {
-                this.processReport(...this.packetSlices.pop()!);
+            const packetSlices = this.separateBatch(packet);
+            while (packetSlices.length > 0) {
+                this.processReport(...packetSlices.pop()!);
             }
         } catch (error) {
             console.log(packet);

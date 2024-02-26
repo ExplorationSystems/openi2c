@@ -1,8 +1,17 @@
-import { BNO08X } from '.';
+import { BNO08X, BNO_REPORT_ACCELEROMETER } from '.';
 
 async function main() {
-    const pca9685 = new BNO08X();
-    await pca9685.init();
-    console.log('READY');
+    const bno = new BNO08X();
+    await bno.init();
+
+    await bno.enableFeature(BNO_REPORT_ACCELEROMETER);
+    await bno.enableFeature(BNO_REPORT_ACCELEROMETER);
+    await bno.enableFeature(BNO_REPORT_ACCELEROMETER);
+    await bno.enableFeature(BNO_REPORT_ACCELEROMETER);
+
+    setInterval(async ()=>{
+        const [accelX, accelY, accelZ] = await bno.acceleration();
+        console.log(`X: ${accelX.toFixed(6)} Y: ${accelY.toFixed(6)} Z: ${accelZ.toFixed(6)} m/s^2`);
+    }, 1000)
 }
 main();

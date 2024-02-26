@@ -42,9 +42,9 @@ export const COMMAND_REQUEST = 0xF2;
 export const COMMAND_RESPONSE = 0xF1;
 
 export const DEFAULT_REPORT_INTERVAL = 50000;  // in microseconds = 50ms
-export const QUAT_READ_TIMEOUT = 0.500;  // timeout in seconds
-export const PACKET_READ_TIMEOUT = 2.000;  // timeout in seconds
-export const FEATURE_ENABLE_TIMEOUT = 2.0;
+export const QUAT_READ_TIMEOUT = 500;  // timeout in ms
+export const PACKET_READ_TIMEOUT = 2000;  // timeout in ms
+export const FEATURE_ENABLE_TIMEOUT = 2000; // timeout in ms
 export const DEFAULT_TIMEOUT = 2.0;
 export const BNO08X_CMD_RESET = 0x01;
 export const QUAT_Q_POINT = 14;
