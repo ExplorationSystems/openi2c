@@ -4,7 +4,7 @@ import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
 export * from './constants';
-import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER, BNO_REPORT_GYROSCOPE, BNO_REPORT_ROTATION_VECTOR } from './constants';
+import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER, BNO_REPORT_GYROSCOPE, BNO_REPORT_ROTATION_VECTOR, ME_CAL_CONFIG, COMMAND_REQUEST, DEFAULT_TIMEOUT, ME_GET_CAL } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -28,7 +28,7 @@ export class BNO08X extends Module<Config> {
 
     // TODO: this is wrong there should be one per channel per direction
     private sequenceNumber: number[] = [0, 0, 0, 0, 0, 0];
-    private twoEndedSequenceNumbers: Record<number, number> = {};
+    private twoEndedSequenceNumbers: Map<number, number> = new Map();
     private dcdSavedAt: number = -1;
 
     constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config: Partial<Config> = defaultConfig) {
@@ -68,6 +68,91 @@ export class BNO08X extends Module<Config> {
         setFeatureReport.writeUInt32LE(sensorSpecificConfig, 13);
 
         return setFeatureReport;
+    }
+
+    async beginCalibration() {
+        await this.sendMeCommand(
+            [
+                1,  // calibrate accel
+                1,  // calibrate gyro
+                1,  // calibrate mag
+                ME_CAL_CONFIG,
+                0,  // calibrate planar acceleration
+                0,  // 'on_table' calibration
+                0,  // reserved
+                0,  // reserved
+                0,  // reserved
+            ]
+        )
+
+        this.calibrationComplete = false;
+    }
+    async calibrationStatus() {
+        await this.sendMeCommand([
+            0, // calibrate accel
+            0, // calibrate gyro
+            0, // calibrate mag
+            ME_GET_CAL, // constant value for getting calibration status
+            0, // calibrate planar acceleration
+            0, // 'on_table' calibration
+            0, // reserved
+            0, // reserved
+            0, // reserved
+        ]);
+        
+        return this.magnetometerAccuracy;
+    }
+
+    private async sendMeCommand(subcommandParams?: number[]): Promise<void> {
+        const startTime = Date.now();
+        const localBuffer = this.commandBuffer;
+
+        this.insertCommandRequestReport(
+            ME_CALIBRATE,
+            this.commandBuffer, // should use this._dataBuffer :\ but sendPacket doesn't
+            this.getReportSeqId(COMMAND_REQUEST),
+            subcommandParams,
+        );
+
+        await this.sendPacket(BNO_CHANNEL_CONTROL, localBuffer);
+        this.incrementReportSeq(COMMAND_REQUEST);
+        while (Date.now() - startTime < DEFAULT_TIMEOUT) {
+            await this.processAvailablePackets();
+            if (this.meCalibrationStartedAt > startTime) {
+                break;
+            }
+        } 
+    }
+
+    private incrementReportSeq(reportId: number): void {
+        const current = this.twoEndedSequenceNumbers.get(reportId) ?? 0;
+        this.twoEndedSequenceNumbers.set(reportId, (current + 1) % 256);
+    }
+
+    private getReportSeqId(reportId: number): number {
+        return this.twoEndedSequenceNumbers.get(reportId) ?? 0;
+    }
+
+    private insertCommandRequestReport(
+        command: number,
+        buffer: Uint8Array,
+        nextSequenceNumber: number,
+        commandParams?: number[]
+    ): void {
+        if (commandParams && commandParams.length > 9) {
+            throw new Error(`Command request reports can only have up to 9 arguments but ${commandParams.length} were given`);
+        }
+        buffer.fill(0, 0, 12);
+        buffer[0] = COMMAND_REQUEST;
+        buffer[1] = nextSequenceNumber;
+        buffer[2] = command;
+        if (commandParams === undefined) {
+            return;
+        }
+    
+        commandParams.forEach((param, idx) => {
+            buffer[3 + idx] = param;
+        });
     }
 
     /**
@@ -120,6 +205,32 @@ export class BNO08X extends Module<Config> {
     }
 
     /**
+     * Get the roll pitch yaw on xyz axis using acceleration
+     */
+    async euler(): Promise<[number, number, number]> {
+        // Placeholder values for acceleration on x, y, and z axes
+        // Replace these with actual accelerometer readings
+        const [ax, ay, az] = await this.acceleration()
+
+        // Calculate roll and pitch based on the acceleration data
+        // Roll (rotation around x-axis)
+        const roll = Math.atan2(ay, az);
+        // Pitch (rotation around y-axis)
+        const pitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az));
+
+        // Yaw (rotation around z-axis) cannot be determined from acceleration alone
+        // Placeholder value for yaw
+        const yaw = 0; // This would require a magnetometer to calculate accurately
+
+        // Convert radians to degrees
+        const rollDeg = roll * (180 / Math.PI);
+        const pitchDeg = pitch * (180 / Math.PI);
+        const yawDeg = yaw * (180 / Math.PI);
+
+        return [rollDeg, pitchDeg, yawDeg];
+    }
+
+    /**
      * A tuple representing Gyro's rotation measurements on the X, Y, and Z
      * axes in radians per second
      */
@@ -144,6 +255,16 @@ export class BNO08X extends Module<Config> {
         }
     }
 
+    async magneticHeading() {
+        const [magX, magY] = await this.magnetic(); // Assuming bno.magnetic() returns [magX, magY, magZ]
+        let heading = Math.atan2(magY, magX) * (180 / Math.PI); // Convert radians to degrees
+        if (heading < 0) {
+            heading += 360; // Adjust for negative values to get a full 360° range
+        }
+        // console.log(`Magnetic Heading: ${heading.toFixed(2)}°`);
+        return heading;
+    }
+
     /**
      * A quaternion representing the current rotation vector
      */
@@ -151,6 +272,33 @@ export class BNO08X extends Module<Config> {
         await this.processAvailablePackets();
         if (this.readings[BNO_REPORT_ROTATION_VECTOR]) {
             return this.readings[BNO_REPORT_ROTATION_VECTOR];
+        } else {
+            throw new Error("No quaternion report found, is it enabled?");
+        }
+    }
+
+    /**
+     * A quaternion representing the current rotation vector expressed as a quaternion with no
+     * specific reference for heading, while roll and pitch are referenced against gravity. To
+     * prevent sudden jumps in heading due to corrections, the `gameQuaternion` property is not
+     * corrected using the magnetometer. Some drift is expected
+     */
+    async gameQuaternion(): Promise<[number, number, number, number]> {
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_ROTATION_VECTOR]) {
+            return this.readings[BNO_REPORT_ROTATION_VECTOR];
+        } else {
+            throw new Error("No quaternion report found, is it enabled?");
+        }
+    }
+
+    /**
+     * The number of steps detected since the sensor was initialized
+     */
+    async steps(): Promise<number>{
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_STEP_COUNTER]) {
+            return this.readings[BNO_REPORT_STEP_COUNTER];
         } else {
             throw new Error("No quaternion report found, is it enabled?");
         }
@@ -322,8 +470,8 @@ export class BNO08X extends Module<Config> {
                 this.processReport(...packetSlices.pop()!);
             }
         } catch (error) {
-            console.log(packet);
-            throw error;
+            console.error(packet);
+            // throw error;
         }
     }
 
