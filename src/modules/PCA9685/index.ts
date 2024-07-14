@@ -3,7 +3,7 @@ import { sleep } from '../../utils';
 import { debug } from '../../debug';
 import { Module } from '../Module';
 
-export const config = {
+const defaultConfig = {
     // Module Registers
     ADDRESS: 0x40,
     MODE1: 0x00,
@@ -17,8 +17,13 @@ export const config = {
     frequency: 50
 }
 
-export class PCA9685 extends Module<typeof config> {
-    public readonly config = config;
+type Config = typeof defaultConfig;
+
+export class PCA9685 extends Module<Config> {
+    constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config?: Partial<Config>, ) {
+        super(busNumber, address, config);
+    }
+
     async init() {
         await this.setFrequency(this.config.frequency);
     }
@@ -26,12 +31,12 @@ export class PCA9685 extends Module<typeof config> {
     async setDutyCycle(channel: number, dutyCycle: number): Promise<void> {
         dutyCycle = Math.min(1, Math.max(0, dutyCycle)); // Clamp to [0,1]
 
-        this.log(`Set duty cycle for channel ${channel} to ${dutyCycle}`);
+        this.debug.log(`Set duty cycle for channel ${channel} to ${dutyCycle}`);
         await this.setPWM(channel, 0, Math.round(dutyCycle * 4095));
     }
 
     async setFrequency(freq: number) {
-        this.log(`Set PWM frequency to ${freq} Hz`);
+        this.debug.log(`Set PWM frequency to ${freq} Hz`);
 
         const prescale = Math.round(25000000 / (4096 * freq)) - 1;
 
@@ -44,7 +49,7 @@ export class PCA9685 extends Module<typeof config> {
     }
 
     async setPWM(channel: number, on: number, off: number) {
-        this.log(`Set PWM for channel ${channel} to ${on} to ${off}`);
+        this.debug.log(`Set PWM for channel ${channel} to ${on} to ${off}`);
         await Promise.all([
             this.bus.writeByte(this.config.ADDRESS, this.config.LED0_ON_L + 4 * channel, on & 0xff),
             this.bus.writeByte(this.config.ADDRESS, this.config.LED0_ON_H + 4 * channel, on >> 8),
@@ -53,3 +58,5 @@ export class PCA9685 extends Module<typeof config> {
         ]);
     }
 }
+
+export const config = defaultConfig;
