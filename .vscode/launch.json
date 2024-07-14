@@ -14,7 +14,7 @@
                 "${workspaceFolder}/src/modules/BNO08X/example.ts"
             ],
             "env": {
-                "DEBUG": "*"
+                //"DEBUG": "*"
             },
             "cwd": "${workspaceRoot}",
             "internalConsoleOptions": "openOnSessionStart",

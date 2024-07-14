@@ -4,7 +4,7 @@ import { debug } from '../../debug';
 import { Module } from '../Module';
 import { Packet, PacketError, PacketHeader } from './Packet';
 export * from './constants';
-import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER } from './constants';
+import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER, BNO_REPORT_GYROSCOPE, BNO_REPORT_ROTATION_VECTOR } from './constants';
 
 export const defaultConfig = {
     ADDRESS: 0x4B,
@@ -106,12 +106,53 @@ export class BNO08X extends Module<Config> {
 
     }
 
+    /**
+     * A tuple representing the acceleration measurements on the X, Y, and Z
+     * axes in meters per second squared 
+    */
     async acceleration(): Promise<[number, number, number]> {
         await this.processAvailablePackets();
         if (this.readings[BNO_REPORT_ACCELEROMETER]) {
             return this.readings[BNO_REPORT_ACCELEROMETER];
         } else {
             throw new Error("No accel report found, is it enabled?");
+        }
+    }
+
+    /**
+     * A tuple representing Gyro's rotation measurements on the X, Y, and Z
+     * axes in radians per second
+     */
+    async gyro(): Promise<[number, number, number]> {
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_GYROSCOPE]) {
+            return this.readings[BNO_REPORT_GYROSCOPE];
+        } else {
+            throw new Error("No gyro report found, is it enabled?");
+        }
+    }
+
+    /**
+     * A tuple of the current magnetic field measurements on the X, Y, and Z axes
+     */
+    async magnetic(): Promise<[number, number, number]> {
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_MAGNETOMETER]) {
+            return this.readings[BNO_REPORT_MAGNETOMETER];
+        } else {
+            throw new Error("No magfield report found, is it enabled?");
+        }
+    }
+
+    /**
+     * A quaternion representing the current rotation vector
+     */
+    async quaternion(): Promise<[number, number, number, number]> {
+        await this.processAvailablePackets();
+        if (this.readings[BNO_REPORT_ROTATION_VECTOR]) {
+            return this.readings[BNO_REPORT_ROTATION_VECTOR];
+        } else {
+            throw new Error("No quaternion report found, is it enabled?");
         }
     }
 
