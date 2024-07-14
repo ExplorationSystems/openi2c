@@ -1,6 +1,6 @@
 {
     "name": "openi2c",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": "This library is a set of cross platform drivers for common I2C devices.",
     "main": "dist/index.js",
     "scripts": {

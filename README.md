@@ -1,4 +1,6 @@
 # OpenI2C
+**This library is highly experimental and is currently a work in progress.**
+
 This library is a set of cross platform drivers for common I2C devices using i2c-bus.
 
 ## Prerequisites
