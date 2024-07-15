@@ -255,13 +255,16 @@ export class BNO08X extends Module<Config> {
         }
     }
 
-    async magneticHeading() {
+    /**
+     * The current heading in degrees
+     */
+    async heading() {
         const [magX, magY] = await this.magnetic(); // Assuming bno.magnetic() returns [magX, magY, magZ]
         let heading = Math.atan2(magY, magX) * (180 / Math.PI); // Convert radians to degrees
         if (heading < 0) {
             heading += 360; // Adjust for negative values to get a full 360° range
         }
-        // console.log(`Magnetic Heading: ${heading.toFixed(2)}°`);
+
         return heading;
     }
 
