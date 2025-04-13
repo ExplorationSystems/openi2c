@@ -13,7 +13,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/ExplorationSystems/openi2c.git"
+        "url": "git+https://github.com/ExpeditionExploration/openi2c.git"
     },
     "keywords": [
         "i2c",
