@@ -13,10 +13,10 @@ type OpenBus = (busNumber: number, options?: OpenOptions) => PromisifiedBus;
 const debug = debugLogger.extend('i2c-bus');
 const mocked = process.env.OPENI2C_MOCKED === 'true';
 
-let open: OpenBus;
+let openBus: OpenBus;
 if (!mocked) {
     debug('Loading i2c bus...');
-    open = (busNumber, options) => {
+    openBus = (busNumber, options) => {
         debug('Open i2c bus...');
         // Open the bus synchronously and return the promisified bus
         return require('i2c-bus').openSync(busNumber, options).promisifiedBus();
@@ -24,7 +24,7 @@ if (!mocked) {
 } else {
     // Mocked bindings
     debug('Using mocked i2c bus...');
-    open = () => {
+    openBus = () => {
         const bus: PromisifiedBus = {
             close: async () => {
                 debug('Mock: close() called');
@@ -118,4 +118,4 @@ if (!mocked) {
 }
 
 
-export { open, mocked }
+export { openBus, mocked }

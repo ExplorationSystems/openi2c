@@ -1,5 +1,5 @@
 import type { PromisifiedBus } from 'i2c-bus';
-import { open as openI2CBus } from '../bus';
+import { openBus } from '../bus';
 import { debug } from '../debug';
 
 export abstract class Module<T extends Record<any, any>> {
@@ -10,7 +10,7 @@ export abstract class Module<T extends Record<any, any>> {
     constructor(busNumber: number = 0, address: number, config: Partial<T> = {}) {
         this.config = Object.assign(this.config, config);
         this.address = address;
-        this.bus = openI2CBus(busNumber);
+        this.bus = openBus(busNumber);
     }
     /**
      * Initialize the module.
