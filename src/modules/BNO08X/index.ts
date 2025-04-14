@@ -4,15 +4,20 @@ import { Packet, PacketError, PacketHeader } from './Packet';
 export * from './constants';
 import { BNO_CHANNEL_EXE, FEATURE_ENABLE_TIMEOUT, ENABLED_ACTIVITIES, DEFAULT_REPORT_INTERVAL, SHTP_REPORT_PRODUCT_ID_REQUEST, SET_FEATURE_COMMAND, BNO_CHANNEL_CONTROL, SHTP_REPORT_PRODUCT_ID_RESPONSE, BNO_CHANNEL_SHTP_COMMAND, AVAIL_SENSOR_REPORTS, REPORT_LENGTHS, ME_CALIBRATE, SAVE_DCD, GET_FEATURE_RESPONSE, INITIAL_REPORTS, COMMAND_RESPONSE, BNO_REPORT_STEP_COUNTER, BNO_REPORT_SHAKE_DETECTOR, BNO_REPORT_STABILITY_CLASSIFIER, BNO_REPORT_ACTIVITY_CLASSIFIER, BNO_REPORT_MAGNETOMETER, RAW_REPORTS, BNO_HEADER_LEN, BNO_REPORT_ACCELEROMETER, BNO_REPORT_GYROSCOPE, BNO_REPORT_ROTATION_VECTOR, ME_CAL_CONFIG, COMMAND_REQUEST, DEFAULT_TIMEOUT, ME_GET_CAL } from './constants';
 
-export const defaultConfig = {
-    ADDRESS: 0x4B,
-    DATA_BUFFER_SIZE: 512, // Not sure if this is nessesary in the config.
-    PACKET_READ_TIMEOUT: 2.0,
-}
-type Config = typeof defaultConfig;
 
+type Config = {
+    address: number;
+    dataBufferSize: number;
+    packetReadTimeout: number;
+};
 
 export class BNO08X extends Module<Config> {
+    config = {
+        address: 0x4B,
+        dataBufferSize: 512,
+        packetReadTimeout: 2.0,
+    };
+
     private dataBuffer: Buffer;
     private commandBuffer: Buffer = Buffer.alloc(12)
     private readings: Record<number, any> = {}; // for saving the most recent reading when decoding several packets
@@ -29,16 +34,18 @@ export class BNO08X extends Module<Config> {
     private twoEndedSequenceNumbers: Map<number, number> = new Map();
     private dcdSavedAt: number = -1;
 
-    constructor(busNumber: number = 0, address: number = defaultConfig.ADDRESS, config: Partial<Config> = defaultConfig) {
-        super(busNumber, address, config);
-
-        this.dataBuffer = Buffer.alloc(this.config.DATA_BUFFER_SIZE);
+    constructor(busNumber?: number, config?: Partial<Config>) {
+        super(busNumber);
+        this.config = Object.assign(this.config, config);
+        this.dataBuffer = Buffer.alloc(this.config.dataBufferSize);
     }
 
     /**
      * Initialize the sensor
      */
     async init() {
+        super.init();
+
         for (let i = 0; i < 3; i++) {
             // this.hardReset();
             await this.softReset();
@@ -673,7 +680,7 @@ export class BNO08X extends Module<Config> {
     }
 
     private async waitForPacket(timeout?: number): Promise<Packet> {
-        timeout = timeout || this.config.PACKET_READ_TIMEOUT;
+        timeout = timeout || this.config.packetReadTimeout;
         let start_time = Date.now();
         // TODO make these async somehow.
         while ((Date.now() - start_time) / 1000 < timeout) {
@@ -769,7 +776,7 @@ export class BNO08X extends Module<Config> {
         this.debug("trying to read", requestedReadLength, "bytes");
         // +4 for the header
         const totalReadLength = requestedReadLength + 4;
-        if (totalReadLength > this.config.DATA_BUFFER_SIZE) {
+        if (totalReadLength > this.config.dataBufferSize) {
             this.dataBuffer = Buffer.alloc(totalReadLength);
             this.debug(
                 `!!!!!!!!!!!! ALLOCATION: increased _data_buffer to Uint8Array(${totalReadLength}) !!!!!!!!!!!!!`
@@ -825,5 +832,3 @@ export class BNO08X extends Module<Config> {
         return this.sequenceNumber[channel];
     }
 }
-
-export const config = defaultConfig;

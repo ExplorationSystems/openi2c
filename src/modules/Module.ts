@@ -1,22 +1,39 @@
 import type { PromisifiedBus } from 'i2c-bus';
 import { openBus } from '../bus';
 import { debug } from '../debug';
+import { AlreadyInitialisedError, NotInitialisedError } from '../errors';
 
-export abstract class Module<T extends Record<any, any>> {
+export abstract class Module<T extends { address: number, [key: string]: any }> {
     public readonly bus!: PromisifiedBus;
-    public readonly config: T = {} as T;
-    public readonly address!: number;
+    public readonly abstract config: T;
 
-    constructor(busNumber: number = 0, address: number, config: Partial<T> = {}) {
-        this.config = Object.assign(this.config, config);
-        this.address = address;
+    constructor(busNumber: number = 0) {
+        // Config will be set by the subclass, here we allow for partial config override
         this.bus = openBus(busNumber);
     }
-    /**
-     * Initialize the module.
-     * Should be implemented by subclasses.
-     */
-    abstract init(): Promise<void>;
+
+    get address() {
+        return this.config.address;
+    }
+
+    private _init: boolean = false;
+    init() {
+        this.debug('init called');
+
+        if (this._init) {
+            this.debug('Already initialised, throwing error');
+            throw new AlreadyInitialisedError();
+        }
+
+        this._init = true;
+    }
+
+    assertInitialised() {
+        if (!this._init) {
+            this.debug('Not initialised, throwing error');
+            throw new NotInitialisedError();
+        }
+    }
 
     private _debug: typeof debug | undefined = undefined;
     protected get debug() {
@@ -30,28 +47,40 @@ export abstract class Module<T extends Record<any, any>> {
 
 
     async readInto(buf: Buffer, length: number) {
+        this.assertInitialised();
+
         return await this.bus.i2cRead(this.address, length, buf);
     }
 
     async readByte(adrs: number) {
+        this.assertInitialised();
+
         return await this.bus.readByte(this.address, adrs);
     }
 
     async readBytes(adrs: number, length: number) {
+        this.assertInitialised();
+
         const buf = Buffer.alloc(length);
         await this.bus.readI2cBlock(this.address, adrs, length, buf);
         return buf;
     }
 
     async write(buf: Buffer) {
+        this.assertInitialised();
+
         await this.bus.i2cWrite(this.address, buf.length, buf);
     }
 
     async writeByte(adrs: number, value: number) {
+        this.assertInitialised();
+
         await this.bus.writeByte(this.address, adrs, value);
     }
 
     async writeBytes(adrs: number, buf: Buffer) {
+        this.assertInitialised();
+
         await this.bus.writeI2cBlock(this.address, adrs, buf.length, buf);
     }
 
