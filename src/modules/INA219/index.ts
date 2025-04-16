@@ -1,23 +1,34 @@
 import { sleep } from '../../utils';
 import { Module } from '../Module';
 import {
-    MODE1,
-    PRESCALE,
-    LED0_ON_L,
-    LED0_ON_H,
-    LED0_OFF_L,
-    LED0_OFF_H,
+    BUS_VOLTAGE_REGISTER,
+    CALIBRATION_REGISTER,
+    CONFIGURATION_REGISTER,
+    CURRENT_REGISTER,
+    POWER_REGISTER,
+    SHUNT_VOLTAGE_REGISTER
 } from './constants'
 
 type Config = {
     address: number;
-    frequency: number;
+
+    // `true` will swap sent/received byte order
+    // INA219 expects all instructions in big-endian order.
+    littleEndianMaster: boolean;
+
+    // Calibration parameters
+    maxBusVoltage: number;
+    maxShuntVoltage: number;
+    shuntResistance: number;
 }
 
-export class PCA9685 extends Module<Config> {
-    config = {
-        address: 0x40,
-        frequency: 50,
+export class INA219 extends Module<Config> {
+    config: Config = {
+        address: 0x81, // Slave address, when A1=GND and A0=Vs+
+        littleEndianMaster: true,
+        maxBusVoltage: 32,
+        maxShuntVoltage: 0.32,
+        shuntResistance: 0.5,
     }
 
     constructor(busNumber?: number, config?: Partial<Config>) {
@@ -28,36 +39,31 @@ export class PCA9685 extends Module<Config> {
     async init() {
         super.init();
 
-        await this.setFrequency(this.config.frequency);
+        await this.calibrate(
+            this.config.maxBusVoltage,
+            this.config.maxShuntVoltage,
+            this.config.shuntResistance
+        );
     }
 
-    async setDutyCycle(channel: number, dutyCycle: number): Promise<void> {
-        dutyCycle = Math.min(1, Math.max(0, dutyCycle)); // Clamp to [0,1]
+    /**
+     * Calibrate 
+     * @param maxBusVoltage Amperes
+     * @param maxShuntVoltage Volts
+     * @param shuntResistance Ohms
+     */
+    async calibrate(
+        maxBusVoltage: number,
+        maxShuntVoltage: number, 
+        shuntResistance: number,
+    ) {
+        const maxCurrent = maxShuntVoltage / shuntResistance;
+        const analogToDigitalStep = maxCurrent / 32767; // 2**15 - 1
+        const coarseAnalogToDigitalStep = maxCurrent / 4096;
+        const mediumAnalogToDigitalStep = (analogToDigitalStep + coarseAnalogToDigitalStep) / 2; // Adjust this for more granular resolution
 
-        this.debug(`Set duty cycle for channel ${channel} to ${dutyCycle}`);
-        await this.setPWM(channel, 0, Math.round(dutyCycle * 4095));
-    }
+        const calibrationValue = Number.parseInt((0.04096 / (mediumAnalogToDigitalStep * shuntResistance)).toFixed(0));
 
-    async setFrequency(freq: number) {
-        this.debug(`Set PWM frequency to ${freq} Hz`);
-
-        const prescale = Math.round(25000000 / (4096 * freq)) - 1;
-
-        await this.bus.writeByte(this.address, MODE1, 0x10); // sleep
-        await this.bus.writeByte(this.address, PRESCALE, prescale); // set frequency prescaler
-        // Does it need to sleep?
-        await sleep(1);
-        await this.bus.writeByte(this.address, MODE1, 0x80); // wake up
-        await sleep(1);
-    }
-
-    async setPWM(channel: number, on: number, off: number) {
-        this.debug(`Set PWM for channel ${channel} to ${on} to ${off}`);
-        await Promise.all([
-            this.bus.writeByte(this.address, LED0_ON_L + 4 * channel, on & 0xff),
-            this.bus.writeByte(this.address, LED0_ON_H + 4 * channel, on >> 8),
-            this.bus.writeByte(this.address, LED0_OFF_L + 4 * channel, off & 0xff),
-            this.bus.writeByte(this.address, LED0_OFF_H + 4 * channel, off >> 8)
-        ]);
+        this.bus.writeByte(this.address, CONFIGURATION_REGISTER, calibrationValue);
     }
 }
