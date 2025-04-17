@@ -1,3 +1,4 @@
+import { Endian } from '../../types';
 import { sleep } from '../../utils';
 import { Module } from '../Module';
 import {
@@ -19,6 +20,7 @@ export class PCA9685 extends Module<Config> {
         address: 0x40,
         frequency: 50,
     }
+    endian = Endian.BE; // TODO Change to correct endian
 
     constructor(busNumber?: number, config?: Partial<Config>) {
         super(busNumber);
