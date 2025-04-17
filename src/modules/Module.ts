@@ -2,10 +2,12 @@ import type { PromisifiedBus } from 'i2c-bus';
 import { openBus } from '../bus';
 import { debug } from '../debug';
 import { AlreadyInitialisedError, NotInitialisedError } from '../errors';
+import { Endian } from '../types';
 
-export abstract class Module<T extends { address: number, [key: string]: any }> {
+export abstract class Module<T extends { address: number; [key: string]: any }> {
     public readonly bus!: PromisifiedBus;
-    public readonly abstract config: T;
+    public abstract readonly config: T;
+    public abstract readonly endian: Endian;
 
     constructor(busNumber: number = 0) {
         // Config will be set by the subclass, here we allow for partial config override
@@ -45,11 +47,23 @@ export abstract class Module<T extends { address: number, [key: string]: any }> 
         return this._debug;
     }
 
-
     async readInto(buf: Buffer, length: number) {
         this.assertInitialised();
 
-        return await this.bus.i2cRead(this.address, length, buf);
+        let tempBuf: Buffer = Buffer.alloc(length);
+        await this.bus.i2cRead(this.address, length, buf);
+
+        if (this.endian === Endian.BE) {
+            // Read into a temporary buffer, then reverse the order of the bytes
+            tempBuf.reverse();
+            // Copy the bytes into the buffer
+            for (let i = 0; i < length; i++) {
+                buf[i] = tempBuf[i];
+            }
+        } else {
+            // Read directly into the buffer
+            await this.bus.i2cRead(this.address, length, buf);
+        }
     }
 
     async readByte(adrs: number) {
@@ -69,6 +83,13 @@ export abstract class Module<T extends { address: number, [key: string]: any }> 
     async write(buf: Buffer) {
         this.assertInitialised();
 
+        // Write the buffer to the I2C device
+        // If the endian is BE, reverse the buffer before writing
+        if (this.endian === Endian.BE) {
+            // Reverse the buffer
+            buf.reverse();
+        }
+        // Write the buffer to the I2C device
         await this.bus.i2cWrite(this.address, buf.length, buf);
     }
 
@@ -87,11 +108,11 @@ export abstract class Module<T extends { address: number, [key: string]: any }> 
     async readBit(adrs: number, bit: number) {
         var buf = await this.readByte(adrs);
         return (buf >> bit) & 1;
-    };
+    }
 
     bitMask(bit: number, length: number) {
         return ((1 << length) - 1) << bit;
-    };
+    }
 
     /**
      * Write a sequence of bits.  Note, this will do a read to get the existing value, then a write.
@@ -106,7 +127,7 @@ export abstract class Module<T extends { address: number, [key: string]: any }> 
         const newValue = oldValue ^ ((oldValue ^ (value << bit)) & mask);
 
         await this.writeByte(adrs, newValue);
-    };
+    }
 
     /**
      * Write one bit.  Note, this will do a read to get the existing value, then a write.
@@ -116,5 +137,5 @@ export abstract class Module<T extends { address: number, [key: string]: any }> 
      */
     async writeBit(adrs: number, bit: number, value: number) {
         await this.writeBits(adrs, bit, 1, value);
-    };
+    }
 }
