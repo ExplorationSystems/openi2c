@@ -1,9 +1,10 @@
-import { PCA9685 } from '.';
+import { INA219 } from '.';
 
 async function main() {
-    const pca9685 = new PCA9685(1);
-    await pca9685.init();
+    const ina219 = new INA219(1);
+    await ina219.init();
 
-    await pca9685.setDutyCycle(0, 0.5);
+    const current = await ina219.readCurrent();
+    console.log(current.toString(16));
 }
 main();

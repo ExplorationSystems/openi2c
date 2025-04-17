@@ -46,24 +46,62 @@ export class INA219 extends Module<Config> {
         );
     }
 
+    async readCurrent(): Promise<number> {
+        return this.bus.readWord(this.address, CURRENT_REGISTER);
+    }
+
     /**
-     * Calibrate 
-     * @param maxBusVoltage Amperes
-     * @param maxShuntVoltage Volts
+     * Calibrate
+     * 
+     * **Note**: Datasheet describes secondary, correctional calibration step. It is not implemented yet.
+     * 
+     * @param vBusMax Volts
+     * @param vShuntMax Volts
      * @param shuntResistance Ohms
      */
     async calibrate(
-        maxBusVoltage: number,
-        maxShuntVoltage: number, 
+        vBusMax: number,
+        vShuntMax: number, 
         shuntResistance: number,
     ) {
-        const maxCurrent = maxShuntVoltage / shuntResistance;
-        const analogToDigitalStep = maxCurrent / 32767; // 2**15 - 1
-        const coarseAnalogToDigitalStep = maxCurrent / 4096;
-        const mediumAnalogToDigitalStep = (analogToDigitalStep + coarseAnalogToDigitalStep) / 2; // Adjust this for more granular resolution
+        // Calculate max possible current
+        const maxPossibleI = vShuntMax / shuntResistance;
 
-        const calibrationValue = Number.parseInt((0.04096 / (mediumAnalogToDigitalStep * shuntResistance)).toFixed(0));
+        // Calculate min and max LSB.
+        const minimumLSB = maxPossibleI / 32767; // 2**15 - 1
+        const maximumLSB = maxPossibleI / 4096;
 
-        this.bus.writeByte(this.address, CONFIGURATION_REGISTER, calibrationValue);
+        // Choose LSB from midpoint of min and max.
+        const LSB = (minimumLSB + maximumLSB) / 2; // Adjust this for more granular resolution
+
+        // Calculate calibration register value and write it to the register.
+        const calibrationRegisterValue = Number.parseInt((0.04096 / (LSB * shuntResistance)).toFixed(0));
+        await this.bus.writeByte(this.address, CALIBRATION_REGISTER, calibrationRegisterValue);
+
+        /*
+        // Calculate power LSB
+        const powerLSB = 20 * LSB;
+
+        // Compute maximum current before overflow.
+        const maxCurrent = LSB * 32767;
+        let maxCurrentBeforeOverflow: number;
+        if (maxPossibleI >= maxCurrent) {
+            maxCurrentBeforeOverflow = maxPossibleI;
+        } else {
+            maxCurrentBeforeOverflow = maxCurrent;
+        }
+
+        // Compute maximum shunt voltage.
+        const maxShuntVoltage = maxCurrentBeforeOverflow * shuntResistance;
+        let maxShuntVoltageBeforeOverflow: number;
+        if (maxShuntVoltage >= vShuntMax) {
+            maxShuntVoltageBeforeOverflow = vShuntMax;
+        } else {
+            maxShuntVoltageBeforeOverflow = maxShuntVoltage;
+        }
+
+        // Calculate maximum power
+        const maximumPower =  maxCurrentBeforeOverflow * vBusMax
+        */
     }
 }
