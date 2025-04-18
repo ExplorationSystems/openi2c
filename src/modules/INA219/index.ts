@@ -144,11 +144,12 @@ export class INA219 extends Module<Config> {
         const maximumLSB = maxPossibleI / 4096;
 
         // Choose LSB from midpoint of min and max.
-        const LSB = (minimumLSB + maximumLSB) / 2; // Adjust this for more granular resolution
+        const LSB = (minimumLSB + maximumLSB) / 2; // Adjust this for more granular or coarse resolution
         this.lsb = LSB;
 
         // Calculate calibration register value and write it to the register.
         const calibrationRegisterValue = Number.parseInt((0.04096 / (LSB * shuntResistance)).toFixed(0));
+        console.log(calibrationRegisterValue)
         await this.bus.writeWord(this.address, CALIBRATION_REGISTER, calibrationRegisterValue);
 
         /*
@@ -180,9 +181,14 @@ export class INA219 extends Module<Config> {
 
     async readCurrent(): Promise<number> {
         this.assertInitialised();
-        this.debug(this.lsb);
-        return toSigned16Bit(this.bus.readWord(this.address, CURRENT_REGISTER));
-        // return await this.getShuntVoltage() / (this.config.shuntResistance * 100); // mV. 100 is for PGA = /8
+        const current = toSigned16Bit(await this.bus.readWord(this.address, CURRENT_REGISTER));
+        this.debug(`current register value: ${current}`);
+        this.debug(`LSB: ${this.lsb!}`);
+        const realCurrent = current * this.lsb!;
+
+        this.debug(`shunt voltage: ${await this.getShuntVoltage()}`)
+
+        return realCurrent
     }
 
     private async getShuntVoltage(): Promise<number> {
