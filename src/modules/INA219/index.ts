@@ -67,6 +67,16 @@ export type Config = {
      * Shunt resistor is 0.5ohm, but this lets you input the real value in case needed.
      */
     shuntResistance: number;
+
+    /**
+     * Shunt ADC resolution/averaging setting. See datasheet page 27. Four bits.
+     */
+    shuntADCResolution: number;
+
+    /**
+     * Bus ADC resolution/averaging setting. See datasheet page 26/27. Four bits.
+     */
+    busADCResolution: number;
 }
 
 export class INA219 extends Module<Config> {
@@ -77,7 +87,11 @@ export class INA219 extends Module<Config> {
         
         shuntVoltagePGA: ShuntVoltagePGA.HugeRange, // Default to smaller resolution to avoid overflow.
         HighBusVoltageRange: true,
+        shuntADCResolution: 0x2, // Default is 12-bit mode
+        busADCResolution: 2, // Default
     }
+
+    private lsb?: number;
 
     constructor(busNumber?: number, config?: Partial<Config>) {
         super(busNumber);
@@ -90,29 +104,20 @@ export class INA219 extends Module<Config> {
         // Init configuration register.
         // Read defaults
         let configReg = await this.bus.readWord(this.address, CONFIGURATION_REGISTER); 
+
         // PGA gain
-        configReg = (configReg & 0xe7ff) | this.config.shuntVoltagePGA; // 0xe7ff masks PG1 and PG0
-        configReg = (configReg & 0xdfff) | (this.config.HighBusVoltageRange ? 1 : 0); // 0xdfff masks BRNG
+        configReg = (configReg & 0xe7ff) | (this.config.shuntVoltagePGA << 11); // 0xe7ff masks PG1 and PG0
+        configReg = (configReg & 0xdfff) | ((this.config.HighBusVoltageRange ? 1 : 0) << 13); // 0xdfff masks BRNG
+        configReg = (configReg & 0xff87) | (this.config.shuntADCResolution << 3) // Masks SADC bits
+        configReg = (configReg & 0xf87f) | (this.config.busADCResolution << 7) // Masks BADC bits
 
         // Finally write configReg
         await this.bus.writeWord(this.address, CONFIGURATION_REGISTER, configReg);
-
-
 
         await this.calibrate(
             this.config.maxBusVoltage,
             this.config.shuntResistance
         );
-    }
-
-    async readCurrent(): Promise<number> {
-        // return this.bus.readWord(this.address, CURRENT_REGISTER);
-        return await this.getShuntVoltage() / (this.config.shuntResistance * 100); // mV. 100 is for PGA = /8
-    }
-
-    private async getShuntVoltage(): Promise<number> {
-        const sVoltage = await this.bus.readWord(this.address, SHUNT_VOLTAGE_REGISTER);
-        return toSigned16Bit(sVoltage);
     }
 
     /**
@@ -140,6 +145,7 @@ export class INA219 extends Module<Config> {
 
         // Choose LSB from midpoint of min and max.
         const LSB = (minimumLSB + maximumLSB) / 2; // Adjust this for more granular resolution
+        this.lsb = LSB;
 
         // Calculate calibration register value and write it to the register.
         const calibrationRegisterValue = Number.parseInt((0.04096 / (LSB * shuntResistance)).toFixed(0));
@@ -170,5 +176,17 @@ export class INA219 extends Module<Config> {
         // Calculate maximum power
         const maximumPower =  maxCurrentBeforeOverflow * vBusMax
         */
+    }
+
+    async readCurrent(): Promise<number> {
+        this.assertInitialised();
+        this.debug(this.lsb);
+        return toSigned16Bit(this.bus.readWord(this.address, CURRENT_REGISTER));
+        // return await this.getShuntVoltage() / (this.config.shuntResistance * 100); // mV. 100 is for PGA = /8
+    }
+
+    private async getShuntVoltage(): Promise<number> {
+        const sVoltage = await this.bus.readWord(this.address, SHUNT_VOLTAGE_REGISTER);
+        return toSigned16Bit(sVoltage);
     }
 }

@@ -8,6 +8,9 @@ async function main() {
         maxBusVoltage: 32, // Default
         shuntResistance: 0.5, // Default
         shuntVoltagePGA: ShuntVoltagePGA.HugeRange,
+        busADCResolution: 2,
+        shuntADCResolution: 2,
+        HighBusVoltageRange: true
     }
 
     const ina219 = new INA219(1, config);
