@@ -1,4 +1,4 @@
-import { sleep } from '../../utils';
+import { sleep, toSigned16Bit } from '../../utils';
 import { Module } from '../Module';
 import {
     BUS_VOLTAGE_REGISTER,
@@ -9,26 +9,56 @@ import {
     SHUNT_VOLTAGE_REGISTER
 } from './constants'
 
-type Config = {
+export enum ShuntVoltagePGA {
+    /**
+     * TinyRange offers the range of +-40mV over the shunt resistor.
+     * 
+     * Conversly, TinyRange offers best resolution (~1.22μV). 
+     */
+    TinyRange = 0, // Gain = 1
+
+    /**
+     * SmallRange offers the range of +-80mV over the shunt resistor.
+     * 
+     * Conversly, SmallRange offers a bit worse resolution (~2.44μV).
+     */
+    SmallRange = 1, // Gain = 0.5
+    
+    /**
+     * LargeRange offers the range of +-160mV over the shunt resistor.
+     * 
+     * Conversly, LargeRange offers worse resolution (~4.88μV).
+     */
+    LargeRange = 2, // Gain = 0.25
+    
+    /**
+     * HugeRange offers the range of 320mV over the shunt resistor.
+     * 
+     * Conversly, HugeRange offers worst resolution (~9.766μV).
+     */
+    HugeRange = 3, // Gain = 0.125
+}
+
+export type Config = {
     address: number;
 
-    // `true` will swap sent/received byte order
-    // INA219 expects all instructions in big-endian order.
-    littleEndianMaster: boolean;
+    // Configuration parameters
+    shuntVoltagePGA: ShuntVoltagePGA;  
 
     // Calibration parameters
     maxBusVoltage: number;
-    maxShuntVoltage: number;
+
+    // Shunt resistor is 0.5ohm, but this lets you input the real value in case needed
     shuntResistance: number;
 }
 
 export class INA219 extends Module<Config> {
     config: Config = {
-        address: 0x81, // Slave address, when A1=GND and A0=Vs+
-        littleEndianMaster: true,
+        address: 0x40, // Default slave address with no soldering
         maxBusVoltage: 32,
-        maxShuntVoltage: 0.32,
         shuntResistance: 0.5,
+        
+        shuntVoltagePGA: ShuntVoltagePGA.HugeRange, // Default to smaller resolution to avoid overflow.
     }
 
     constructor(busNumber?: number, config?: Partial<Config>) {
@@ -39,15 +69,31 @@ export class INA219 extends Module<Config> {
     async init() {
         super.init();
 
+        // Init configuration register.
+        // Read defaults
+        let configReg = await this.bus.readWord(this.address, CONFIGURATION_REGISTER); 
+        // PGA gain
+        configReg = (configReg & 0xe7ff) | this.config.shuntVoltagePGA; // 0xe7ff masks PG1 and PG0
+
+        // Finally write configReg
+        await this.bus.writeWord(this.address, CONFIGURATION_REGISTER, configReg);
+
+
+
         await this.calibrate(
             this.config.maxBusVoltage,
-            this.config.maxShuntVoltage,
             this.config.shuntResistance
         );
     }
 
     async readCurrent(): Promise<number> {
-        return this.bus.readWord(this.address, CURRENT_REGISTER);
+        // return this.bus.readWord(this.address, CURRENT_REGISTER);
+        return await this.getShuntVoltage() / (this.config.shuntResistance * 100); // mV. 100 is for PGA = /8
+    }
+
+    private async getShuntVoltage(): Promise<number> {
+        const sVoltage = await this.bus.readWord(this.address, SHUNT_VOLTAGE_REGISTER);
+        return toSigned16Bit(sVoltage);
     }
 
     /**
@@ -61,9 +107,11 @@ export class INA219 extends Module<Config> {
      */
     async calibrate(
         vBusMax: number,
-        vShuntMax: number, 
         shuntResistance: number,
     ) {
+        // Calculate vShuntMax
+        const vShuntMax = shuntResistance * (vBusMax / shuntResistance);
+
         // Calculate max possible current
         const maxPossibleI = vShuntMax / shuntResistance;
 
@@ -76,7 +124,7 @@ export class INA219 extends Module<Config> {
 
         // Calculate calibration register value and write it to the register.
         const calibrationRegisterValue = Number.parseInt((0.04096 / (LSB * shuntResistance)).toFixed(0));
-        await this.bus.writeByte(this.address, CALIBRATION_REGISTER, calibrationRegisterValue);
+        await this.bus.writeWord(this.address, CALIBRATION_REGISTER, calibrationRegisterValue);
 
         /*
         // Calculate power LSB
