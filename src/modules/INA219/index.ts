@@ -39,16 +39,33 @@ export enum ShuntVoltagePGA {
     HugeRange = 3, // Gain = 0.125
 }
 
+
 export type Config = {
     address: number;
 
     // Configuration parameters
-    shuntVoltagePGA: ShuntVoltagePGA;  
+
+    /**
+     * Set PGA gain.
+     */
+    shuntVoltagePGA: ShuntVoltagePGA;
+
+    /**
+     * Set this to `false` to set the low voltage full scale range of 16V.
+     * Default is `true` or 32V range.
+     */
+    HighBusVoltageRange: boolean;
 
     // Calibration parameters
+
+    /**
+     * Maximum expected bus voltage.
+     */
     maxBusVoltage: number;
 
-    // Shunt resistor is 0.5ohm, but this lets you input the real value in case needed
+    /**
+     * Shunt resistor is 0.5ohm, but this lets you input the real value in case needed.
+     */
     shuntResistance: number;
 }
 
@@ -59,6 +76,7 @@ export class INA219 extends Module<Config> {
         shuntResistance: 0.5,
         
         shuntVoltagePGA: ShuntVoltagePGA.HugeRange, // Default to smaller resolution to avoid overflow.
+        HighBusVoltageRange: true,
     }
 
     constructor(busNumber?: number, config?: Partial<Config>) {
@@ -74,6 +92,7 @@ export class INA219 extends Module<Config> {
         let configReg = await this.bus.readWord(this.address, CONFIGURATION_REGISTER); 
         // PGA gain
         configReg = (configReg & 0xe7ff) | this.config.shuntVoltagePGA; // 0xe7ff masks PG1 and PG0
+        configReg = (configReg & 0xdfff) | (this.config.HighBusVoltageRange ? 1 : 0); // 0xdfff masks BRNG
 
         // Finally write configReg
         await this.bus.writeWord(this.address, CONFIGURATION_REGISTER, configReg);
